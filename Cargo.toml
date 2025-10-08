@@ -1,0 +1,8 @@
+[package]
+name = "jostle"
+description = "Simple, constrained 2D physics library for Bevy optimized for large crowds of units"
+license = "MIT"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
