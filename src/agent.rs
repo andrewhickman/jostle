@@ -45,7 +45,7 @@ enum PositionState {
 
 impl Agent {
     pub fn new(radius: f32) -> Self {
-        debug_assert!(radius <= 0.5);
+        debug_assert!(radius <= 0.5, "radius {radius} too large");
         Agent { radius }
     }
 

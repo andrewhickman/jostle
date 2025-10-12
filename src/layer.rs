@@ -3,7 +3,7 @@ use bevy::{
 };
 use smallvec::SmallVec;
 
-use crate::{Agent, Velocity, tile::Tile};
+use crate::{Agent, Velocity, agent::Position, tile::Tile};
 
 /// A self-contained instance of the physics simulation.
 #[derive(Component, Default, Debug)]
@@ -14,6 +14,7 @@ pub struct Layer {
 
 #[derive(Clone, Copy, Debug)]
 struct LayerAgent {
+    id: Entity,
     radius: f32,
     position: Vec2,
     velocity: Vec2,
@@ -30,9 +31,19 @@ pub struct InLayer(pub Entity);
 pub struct LayerAgents(EntityHashSet);
 
 pub(crate) fn process_collisions(
-    time: Res<Time>,
     mut layers: Query<(&mut Layer, &LayerAgents, &GlobalTransform)>,
-    mut agents: Query<(&Agent, &mut Transform, &mut Velocity, &InLayer), With<Agent>>,
+    mut agents: Query<
+        (
+            Entity,
+            &Agent,
+            &mut Transform,
+            &Position,
+            &mut Velocity,
+            &InLayer,
+        ),
+        With<Agent>,
+    >,
+    time: Res<Time>,
 ) {
     layers
         .par_iter_mut()
@@ -41,29 +52,34 @@ pub(crate) fn process_collisions(
 
             let layer_position = layer_transform.translation().xy();
 
-            for (agent, agent_transform, agent_velocity, _) in
+            for (id, agent, _, agent_position, agent_velocity, _) in
                 agents.iter_many_unique(layer_agents.0.iter())
             {
                 layer.insert_agent(LayerAgent::new(
+                    id,
                     agent,
-                    agent_transform,
+                    agent_position,
                     agent_velocity,
                     layer_position,
                 ));
             }
         });
 
-    agents
-        .par_iter_mut()
-        .for_each(|(agent, mut transform, mut velocity, layer_id)| {
+    let max_speed = 0.5 / time.delta_secs();
+
+    agents.par_iter_mut().for_each(
+        |(id, agent, mut transform, position, mut velocity, layer_id)| {
             if velocity.0 == Vec2::ZERO {
                 return;
             }
 
+            velocity.0 = velocity.0.clamp_length_max(max_speed);
+
             if let Ok((layer, _, layer_transform)) = layers.get(layer_id.0) {
                 let agent = LayerAgent::new(
+                    id,
                     agent,
-                    &transform,
+                    position,
                     &velocity,
                     layer_transform.translation().xy(),
                 );
@@ -74,10 +90,11 @@ pub(crate) fn process_collisions(
                     .filter(|&(_, t)| t < time.delta_secs())
                     .min_by_key(|&(_, t)| FloatOrd(t))
                 {
+                    let t = t.max(0.);
                     let agent_contact = agent.position + agent.velocity * t;
                     let target_contact = nearest.position + nearest.velocity * t;
                     if let Some(normal) = (agent_contact - target_contact).try_normalize() {
-                        let v_comp = velocity.0.dot(normal);
+                        let v_comp = agent.velocity.dot(normal);
                         if v_comp < 0.0 {
                             velocity.0 -= v_comp * normal;
                         }
@@ -91,7 +108,8 @@ pub(crate) fn process_collisions(
                     transform.translation.y = new_position.y;
                 }
             }
-        });
+        },
+    );
 }
 
 impl Layer {
@@ -113,14 +131,16 @@ impl Layer {
 
 impl LayerAgent {
     fn new(
+        id: Entity,
         agent: &Agent,
-        transform: &Transform,
+        position: &Position,
         velocity: &Velocity,
         layer_position: Vec2,
     ) -> Self {
         LayerAgent {
+            id,
             radius: agent.radius(),
-            position: transform.translation.xy() - layer_position,
+            position: position.position - layer_position,
             velocity: velocity.0,
         }
     }
@@ -130,6 +150,10 @@ impl LayerAgent {
     }
 
     fn solve_collision(&self, target: &LayerAgent) -> Option<f32> {
+        if self.id == target.id {
+            return None;
+        }
+
         let position = self.position - target.position;
         let velocity = self.velocity - target.velocity;
         let radius = self.radius + target.radius;
@@ -149,7 +173,13 @@ impl LayerAgent {
 
         let t = (-b - discr.sqrt()) / (2.0 * a);
 
-        if t > 0. || b < 0. { Some(t) } else { None }
+        if t > 0. {
+            Some(t)
+        } else if b < 0. {
+            Some(t)
+        } else {
+            None
+        }
     }
 }
 
@@ -161,9 +191,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn collision_with_self() {
+        let a = make_agent(1, 0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+
+        assert!(a.solve_collision(&a).is_none());
+    }
+
+    #[test]
     fn collision_simple() {
-        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
-        let b = make_agent(0.5, Vec2::new(5.0, 0.0), Vec2::new(-1.0, 0.0));
+        let a = make_agent(1, 0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(2, 0.5, Vec2::new(5.0, 0.0), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
         assert_relative_eq!(t, 2.0);
@@ -171,24 +208,24 @@ mod tests {
 
     #[test]
     fn collision_receding() {
-        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
-        let b = make_agent(0.5, Vec2::new(5.0, 0.0), Vec2::new(1.0, 0.0));
+        let a = make_agent(1, 0.5, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
+        let b = make_agent(2, 0.5, Vec2::new(5.0, 0.0), Vec2::new(1.0, 0.0));
 
         assert!(a.solve_collision(&b).is_none());
     }
 
     #[test]
     fn collision_touching_and_receding() {
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(2.0, 0.0), Vec2::new(1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(2.0, 0.0), Vec2::new(1.0, 0.0));
 
         assert!(a.solve_collision(&b).is_none());
     }
 
     #[test]
     fn collision_touching_and_closing() {
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(2.0, 0.0), Vec2::new(-1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(2.0, 0.0), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
         assert_relative_eq!(t, 0.0);
@@ -196,24 +233,24 @@ mod tests {
 
     #[test]
     fn intersecting_and_stationary() {
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(0.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(0.5, 0.0), Vec2::new(0.0, 0.0));
 
         assert!(a.solve_collision(&b).is_none());
     }
 
     #[test]
     fn intersecting_and_receding() {
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0));
 
         assert!(a.solve_collision(&b).is_none());
     }
 
     #[test]
     fn intersecting_and_closing() {
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(-1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(0.5, 0.0), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
         assert_relative_eq!(t, -1.5);
@@ -221,8 +258,8 @@ mod tests {
 
     #[test]
     fn collision_angled() {
-        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
-        let b = make_agent(0.5, Vec2::new(3.0, 0.8), Vec2::new(-1.0, 0.0));
+        let a = make_agent(1, 0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(2, 0.5, Vec2::new(3.0, 0.8), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
         assert_relative_eq!(t, 1.2);
@@ -231,8 +268,8 @@ mod tests {
     #[test]
     fn collision_almost_touching_closing() {
         let eps = 1e-6f32;
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(-1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
         let expected = eps / 2.0;
@@ -242,14 +279,15 @@ mod tests {
     #[test]
     fn collision_almost_touching_receding() {
         let eps = 1e-6f32;
-        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
-        let b = make_agent(1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(1.0, 0.0));
+        let a = make_agent(1, 1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(2, 1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(1.0, 0.0));
 
         assert!(a.solve_collision(&b).is_none());
     }
 
-    fn make_agent(radius: f32, position: Vec2, velocity: Vec2) -> LayerAgent {
+    fn make_agent(id: u32, radius: f32, position: Vec2, velocity: Vec2) -> LayerAgent {
         LayerAgent {
+            id: Entity::from_raw_u32(id).unwrap(),
             radius,
             position,
             velocity,
