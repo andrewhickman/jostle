@@ -6,7 +6,9 @@ use bevy::{
 /// Marker component for moving agents in the simulation.
 #[derive(Component, Clone, Copy, Debug, Default)]
 #[require(Transform, Position, Velocity)]
-pub struct Agent;
+pub struct Agent {
+    radius: f32,
+}
 
 /// The velocity of an [Agent], in units per second.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -22,7 +24,7 @@ pub(crate) struct Position {
 
 #[derive(Clone, Copy, Debug, Default)]
 enum PositionState {
-    // The agent's physical and rendered position both match its transform.
+    // The agent's physical and render positions both match its transform.
     #[default]
     Render,
     // The agent's transform is its physical position.
@@ -30,7 +32,7 @@ enum PositionState {
         // The physical position at the start of the fixed update.
         start: Vec2,
     },
-    // The agent's transform is set to its rendered position, based on its interpolated physical position.
+    // The agent's transform is set to its render position, based on its interpolated physical position.
     Interpolated {
         // The physical position at the start of the last fixed update.
         start: Vec2,
@@ -39,6 +41,17 @@ enum PositionState {
         // The last change tick which set the agent's transform.
         change_tick: Tick,
     },
+}
+
+impl Agent {
+    pub fn new(radius: f32) -> Self {
+        debug_assert!(radius <= 0.5);
+        Agent { radius }
+    }
+
+    pub fn radius(&self) -> f32 {
+        self.radius
+    }
 }
 
 pub(crate) fn update_physical_position(
@@ -121,7 +134,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -148,7 +161,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_render_update(&mut app, 0.5);
@@ -172,7 +185,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -203,7 +216,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -232,7 +245,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -267,7 +280,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -303,7 +316,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -337,7 +350,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         run_physics_update(&mut app);
@@ -368,7 +381,7 @@ mod tests {
 
         let agent = app
             .world_mut()
-            .spawn((Agent, transform, global, Position::default()))
+            .spawn((Agent::new(0.3), transform, global, Position::default()))
             .id();
 
         let initial_transform_tick = get_position(&mut app, agent).0.last_changed();

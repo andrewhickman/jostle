@@ -1,0 +1,258 @@
+use bevy::{
+    ecs::entity::EntityHashSet, math::FloatOrd, platform::collections::HashMap, prelude::*,
+};
+use smallvec::SmallVec;
+
+use crate::{Agent, Velocity, tile::Tile};
+
+/// A self-contained instance of the physics simulation.
+#[derive(Component, Default, Debug)]
+#[require(Transform)]
+pub struct Layer {
+    agents: HashMap<Tile, SmallVec<[LayerAgent; 4]>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LayerAgent {
+    radius: f32,
+    position: Vec2,
+    velocity: Vec2,
+}
+
+/// The [Layer](crate::Layer) instance containing this agent.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[relationship(relationship_target = LayerAgents)]
+pub struct InLayer(pub Entity);
+
+/// The set of [Agent](crate::Agent) entities in this layer.
+#[derive(Component, Default, Debug)]
+#[relationship_target(relationship = InLayer)]
+pub struct LayerAgents(EntityHashSet);
+
+pub(crate) fn process_collisions(
+    time: Res<Time>,
+    mut layers: Query<(&mut Layer, &LayerAgents, &GlobalTransform)>,
+    mut agents: Query<(&Agent, &mut Transform, &mut Velocity, &InLayer), With<Agent>>,
+) {
+    layers
+        .par_iter_mut()
+        .for_each(|(mut layer, layer_agents, layer_transform)| {
+            layer.clear_agents();
+
+            let layer_position = layer_transform.translation().xy();
+
+            for (agent, agent_transform, agent_velocity, _) in
+                agents.iter_many_unique(layer_agents.0.iter())
+            {
+                layer.insert_agent(LayerAgent::new(
+                    agent,
+                    agent_transform,
+                    agent_velocity,
+                    layer_position,
+                ));
+            }
+        });
+
+    agents
+        .par_iter_mut()
+        .for_each(|(agent, mut transform, mut velocity, layer_id)| {
+            if velocity.0 == Vec2::ZERO {
+                return;
+            }
+
+            if let Ok((layer, _, layer_transform)) = layers.get(layer_id.0) {
+                let agent = LayerAgent::new(
+                    agent,
+                    &transform,
+                    &velocity,
+                    layer_transform.translation().xy(),
+                );
+
+                if let Some((nearest, t)) = layer
+                    .get_agents(agent.tile())
+                    .filter_map(|target| agent.solve_collision(target).map(|t| (target, t)))
+                    .filter(|&(_, t)| t < time.delta_secs())
+                    .min_by_key(|&(_, t)| FloatOrd(t))
+                {
+                    let agent_contact = agent.position + agent.velocity * t;
+                    let target_contact = nearest.position + nearest.velocity * t;
+                    if let Some(normal) = (agent_contact - target_contact).try_normalize() {
+                        let v_comp = velocity.0.dot(normal);
+                        if v_comp < 0.0 {
+                            velocity.0 -= v_comp * normal;
+                        }
+                    }
+
+                    transform.translation.x = agent_contact.x;
+                    transform.translation.y = agent_contact.y;
+                } else {
+                    let new_position = agent.position + agent.velocity * time.delta_secs();
+                    transform.translation.x = new_position.x;
+                    transform.translation.y = new_position.y;
+                }
+            }
+        });
+}
+
+impl Layer {
+    fn insert_agent(&mut self, agent: LayerAgent) {
+        let tile = agent.tile();
+        for neighbour in tile.neighbourhood() {
+            self.agents.entry(neighbour).or_default().push(agent);
+        }
+    }
+
+    fn get_agents(&self, tile: Tile) -> impl Iterator<Item = &LayerAgent> {
+        self.agents[&tile].iter()
+    }
+
+    fn clear_agents(&mut self) {
+        self.agents.clear();
+    }
+}
+
+impl LayerAgent {
+    fn new(
+        agent: &Agent,
+        transform: &Transform,
+        velocity: &Velocity,
+        layer_position: Vec2,
+    ) -> Self {
+        LayerAgent {
+            radius: agent.radius(),
+            position: transform.translation.xy() - layer_position,
+            velocity: velocity.0,
+        }
+    }
+
+    fn tile(&self) -> Tile {
+        Tile::new(self.position)
+    }
+
+    fn solve_collision(&self, target: &LayerAgent) -> Option<f32> {
+        let position = self.position - target.position;
+        let velocity = self.velocity - target.velocity;
+        let radius = self.radius + target.radius;
+
+        let a = velocity.length_squared();
+        let b = 2.0 * position.dot(velocity);
+        let c = position.length_squared() - radius * radius;
+
+        if a == 0.0 {
+            return None;
+        }
+
+        let discr = b * b - 4.0 * a * c;
+        if discr < 0.0 {
+            return None;
+        }
+
+        let t = (-b - discr.sqrt()) / (2.0 * a);
+
+        if t > 0. || b < 0. { Some(t) } else { None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+    use bevy::prelude::*;
+
+    use super::*;
+
+    #[test]
+    fn collision_simple() {
+        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(0.5, Vec2::new(5.0, 0.0), Vec2::new(-1.0, 0.0));
+
+        let t = a.solve_collision(&b).unwrap();
+        assert_relative_eq!(t, 2.0);
+    }
+
+    #[test]
+    fn collision_receding() {
+        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
+        let b = make_agent(0.5, Vec2::new(5.0, 0.0), Vec2::new(1.0, 0.0));
+
+        assert!(a.solve_collision(&b).is_none());
+    }
+
+    #[test]
+    fn collision_touching_and_receding() {
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(-1.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(2.0, 0.0), Vec2::new(1.0, 0.0));
+
+        assert!(a.solve_collision(&b).is_none());
+    }
+
+    #[test]
+    fn collision_touching_and_closing() {
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(2.0, 0.0), Vec2::new(-1.0, 0.0));
+
+        let t = a.solve_collision(&b).unwrap();
+        assert_relative_eq!(t, 0.0);
+    }
+
+    #[test]
+    fn intersecting_and_stationary() {
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(0.0, 0.0));
+
+        assert!(a.solve_collision(&b).is_none());
+    }
+
+    #[test]
+    fn intersecting_and_receding() {
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0));
+
+        assert!(a.solve_collision(&b).is_none());
+    }
+
+    #[test]
+    fn intersecting_and_closing() {
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(0.5, 0.0), Vec2::new(-1.0, 0.0));
+
+        let t = a.solve_collision(&b).unwrap();
+        assert_relative_eq!(t, -1.5);
+    }
+
+    #[test]
+    fn collision_angled() {
+        let a = make_agent(0.5, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(0.5, Vec2::new(3.0, 0.8), Vec2::new(-1.0, 0.0));
+
+        let t = a.solve_collision(&b).unwrap();
+        assert_relative_eq!(t, 1.2);
+    }
+
+    #[test]
+    fn collision_almost_touching_closing() {
+        let eps = 1e-6f32;
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(-1.0, 0.0));
+
+        let t = a.solve_collision(&b).unwrap();
+        let expected = eps / 2.0;
+        assert_relative_eq!(t, expected, max_relative = 1e-3);
+    }
+
+    #[test]
+    fn collision_almost_touching_receding() {
+        let eps = 1e-6f32;
+        let a = make_agent(1.0, Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
+        let b = make_agent(1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(1.0, 0.0));
+
+        assert!(a.solve_collision(&b).is_none());
+    }
+
+    fn make_agent(radius: f32, position: Vec2, velocity: Vec2) -> LayerAgent {
+        LayerAgent {
+            radius,
+            position,
+            velocity,
+        }
+    }
+}

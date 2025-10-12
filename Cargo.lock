@@ -1332,7 +1332,9 @@ dependencies = [
 name = "jostle"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "bevy",
+ "smallvec",
 ]
 
 [[package]]
