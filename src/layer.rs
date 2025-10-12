@@ -9,7 +9,7 @@ use crate::{Agent, Velocity, agent::Position, tile::Tile};
 #[derive(Component, Default, Debug)]
 #[require(Transform)]
 pub struct Layer {
-    agents: HashMap<Tile, SmallVec<[LayerAgent; 4]>>,
+    agents: HashMap<Tile, SmallVec<[LayerAgent; 8]>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,7 +48,7 @@ pub(crate) fn process_collisions(
     layers
         .par_iter_mut()
         .for_each(|(mut layer, layer_agents, layer_transform)| {
-            layer.clear_agents();
+            layer.reset_agents(layer_agents.len());
 
             let layer_position = layer_transform.translation().xy();
 
@@ -124,8 +124,12 @@ impl Layer {
         self.agents[&tile].iter()
     }
 
-    fn clear_agents(&mut self) {
+    fn reset_agents(&mut self, new_len: usize) {
+        // Shrinking the hashmap while it is non-empty avoids unnecessary reallocations due to
+        // https://github.com/rust-lang/hashbrown/issues/602
+        self.agents.shrink_to_fit();
         self.agents.clear();
+        self.agents.reserve(new_len);
     }
 }
 
