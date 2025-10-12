@@ -79,7 +79,7 @@ pub(crate) fn update_physical_position(
 
             position.state = PositionState::Physical {
                 start: transform.translation.xy(),
-            }
+            };
         });
 }
 
@@ -121,6 +121,7 @@ pub(crate) fn update_render_position(
 mod tests {
     use std::time::Duration;
 
+    use approx::assert_relative_eq;
     use bevy::{prelude::*, time::TimePlugin};
 
     use super::*;
@@ -141,12 +142,12 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(1.5, -2.0));
-        assert_eq!(position.position, Vec2::new(1.5, -2.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.5, -2.0));
+        assert_relative_eq!(position.position, Vec2::new(1.5, -2.0));
 
         match position.state {
             PositionState::Physical { start } => {
-                assert_eq!(start, Vec2::new(1.5, -2.0));
+                assert_relative_eq!(start, Vec2::new(1.5, -2.0));
             }
             _ => panic!("expected Physical position state"),
         }
@@ -168,7 +169,7 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(1.5, -2.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.5, -2.0));
 
         match position.state {
             PositionState::Render => {}
@@ -196,12 +197,12 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(1.0, 1.0));
-        assert_eq!(position.position, Vec2::new(1.0, 1.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.0, 1.0));
+        assert_relative_eq!(position.position, Vec2::new(1.0, 1.0));
 
         match position.state {
             PositionState::Physical { start } => {
-                assert_eq!(start, Vec2::new(1.0, 1.0));
+                assert_relative_eq!(start, Vec2::new(1.0, 1.0));
             }
             _ => panic!("expected Physical position"),
         }
@@ -225,12 +226,12 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(1.0, -1.0));
-        assert_eq!(position.position, Vec2::new(1.0, -1.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.0, -1.0));
+        assert_relative_eq!(position.position, Vec2::new(1.0, -1.0));
 
         match position.state {
             PositionState::Physical { start } => {
-                assert_eq!(start, Vec2::new(1.0, -1.0));
+                assert_relative_eq!(start, Vec2::new(1.0, -1.0));
             }
             _ => panic!("expected Physical position state"),
         }
@@ -255,7 +256,7 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(0.5, 0.5));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(0.5, 0.5));
 
         match position.state {
             PositionState::Interpolated {
@@ -263,8 +264,8 @@ mod tests {
                 end,
                 change_tick,
             } => {
-                assert_eq!(start, Vec2::new(0.0, 0.0));
-                assert_eq!(end, Vec2::new(1.0, 1.0));
+                assert_relative_eq!(start, Vec2::new(0.0, 0.0));
+                assert_relative_eq!(end, Vec2::new(1.0, 1.0));
                 assert_eq!(change_tick, new_transform.last_changed());
             }
             _ => panic!("expected Interpolated position state"),
@@ -291,7 +292,7 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(0.7, 0.7));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(0.7, 0.7));
 
         match position.state {
             PositionState::Interpolated {
@@ -299,8 +300,8 @@ mod tests {
                 end,
                 change_tick,
             } => {
-                assert_eq!(start, Vec2::new(0.0, 0.0));
-                assert_eq!(end, Vec2::new(1.0, 1.0));
+                assert_relative_eq!(start, Vec2::new(0.0, 0.0));
+                assert_relative_eq!(end, Vec2::new(1.0, 1.0));
                 assert_eq!(change_tick, new_transform.last_changed());
             }
             _ => panic!("expected Physical position state"),
@@ -330,12 +331,12 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(2.0, 2.0));
-        assert_eq!(position.position, Vec2::new(2.0, 2.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(2.0, 2.0));
+        assert_relative_eq!(position.position, Vec2::new(2.0, 2.0));
 
         match position.state {
             PositionState::Physical { start } => {
-                assert_eq!(start, Vec2::new(2.0, 2.0));
+                assert_relative_eq!(start, Vec2::new(2.0, 2.0));
             }
             _ => panic!("expected Physical position state"),
         }
@@ -364,7 +365,7 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(2.0, 2.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(2.0, 2.0));
 
         match position.state {
             PositionState::Render => {}
@@ -391,7 +392,7 @@ mod tests {
 
         let (new_transform, position) = get_position(&mut app, agent);
 
-        assert_eq!(new_transform.translation.xy(), Vec2::new(1.0, 1.0));
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.0, 1.0));
         assert_eq!(new_transform.last_changed(), initial_transform_tick);
 
         match position.state {
