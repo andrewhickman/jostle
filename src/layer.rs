@@ -1,3 +1,5 @@
+#[cfg(feature = "diagnostic")]
+use bevy::diagnostic::Diagnostics;
 use bevy::{
     ecs::entity::EntityHashSet, math::FloatOrd, platform::collections::HashMap, prelude::*,
 };
@@ -9,7 +11,7 @@ use crate::{Agent, Velocity, agent::Position, tile::Tile};
 #[derive(Component, Default, Debug)]
 #[require(Transform)]
 pub struct Layer {
-    agents: HashMap<Tile, SmallVec<[LayerAgent; 8]>>,
+    agents: HashMap<Tile, SmallVec<[LayerAgent; 4]>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -30,21 +32,14 @@ pub struct InLayer(pub Entity);
 #[relationship_target(relationship = InLayer)]
 pub struct LayerAgents(EntityHashSet);
 
-pub(crate) fn process_collisions(
+pub(crate) fn broad_phase(
     mut layers: Query<(&mut Layer, &LayerAgents, &GlobalTransform)>,
-    mut agents: Query<
-        (
-            Entity,
-            &Agent,
-            &mut Transform,
-            &Position,
-            &mut Velocity,
-            &InLayer,
-        ),
-        With<Agent>,
-    >,
-    time: Res<Time>,
+    agents: Query<(Entity, &Agent, &Position, &Velocity), With<Agent>>,
+    #[cfg(feature = "diagnostic")] mut diagnostics: Diagnostics,
 ) {
+    #[cfg(feature = "diagnostic")]
+    let start = std::time::Instant::now();
+
     layers
         .par_iter_mut()
         .for_each(|(mut layer, layer_agents, layer_transform)| {
@@ -52,7 +47,7 @@ pub(crate) fn process_collisions(
 
             let layer_position = layer_transform.translation().xy();
 
-            for (id, agent, _, agent_position, agent_velocity, _) in
+            for (id, agent, agent_position, agent_velocity) in
                 agents.iter_many_unique(layer_agents.0.iter())
             {
                 layer.insert_agent(LayerAgent::new(
@@ -65,6 +60,31 @@ pub(crate) fn process_collisions(
             }
         });
 
+    #[cfg(feature = "diagnostic")]
+    diagnostics.add_measurement(&crate::diagnostic::BROAD_PHASE, || {
+        start.elapsed().as_secs_f64() * 1000.
+    });
+}
+
+pub(crate) fn narrow_phase(
+    layers: Query<(&Layer, &GlobalTransform)>,
+    mut agents: Query<
+        (
+            Entity,
+            &Agent,
+            &mut Transform,
+            &Position,
+            &mut Velocity,
+            &InLayer,
+        ),
+        With<Agent>,
+    >,
+    time: Res<Time>,
+    #[cfg(feature = "diagnostic")] mut diagnostics: Diagnostics,
+) {
+    #[cfg(feature = "diagnostic")]
+    let start = std::time::Instant::now();
+
     let max_speed = 0.5 / time.delta_secs();
 
     agents.par_iter_mut().for_each(
@@ -75,7 +95,7 @@ pub(crate) fn process_collisions(
 
             velocity.0 = velocity.0.clamp_length_max(max_speed);
 
-            if let Ok((layer, _, layer_transform)) = layers.get(layer_id.0) {
+            if let Ok((layer, layer_transform)) = layers.get(layer_id.0) {
                 let agent = LayerAgent::new(
                     id,
                     agent,
@@ -85,7 +105,7 @@ pub(crate) fn process_collisions(
                 );
 
                 if let Some((nearest, t)) = layer
-                    .get_agents(agent.tile())
+                    .get_agents(&agent)
                     .filter_map(|target| agent.solve_collision(target).map(|t| (target, t)))
                     .filter(|&(_, t)| t < time.delta_secs())
                     .min_by_key(|&(_, t)| FloatOrd(t))
@@ -110,24 +130,28 @@ pub(crate) fn process_collisions(
             }
         },
     );
+
+    #[cfg(feature = "diagnostic")]
+    diagnostics.add_measurement(&crate::diagnostic::NARROW_PHASE, || {
+        start.elapsed().as_secs_f64() * 1000.
+    });
 }
 
 impl Layer {
     fn insert_agent(&mut self, agent: LayerAgent) {
-        let tile = agent.tile();
-        for neighbour in tile.neighbourhood() {
-            self.agents.entry(neighbour).or_default().push(agent);
-        }
+        self.agents.entry(agent.tile()).or_default().push(agent);
     }
 
-    fn get_agents(&self, tile: Tile) -> impl Iterator<Item = &LayerAgent> {
-        self.agents[&tile].iter()
+    fn get_agents(&self, agent: &LayerAgent) -> impl Iterator<Item = &LayerAgent> {
+        agent
+            .tile()
+            .neighbourhood()
+            .into_iter()
+            .filter_map(|tile| self.agents.get(&tile))
+            .flatten()
     }
 
     fn reset_agents(&mut self, new_len: usize) {
-        // Shrinking the hashmap while it is non-empty avoids unnecessary reallocations due to
-        // https://github.com/rust-lang/hashbrown/issues/602
-        self.agents.shrink_to_fit();
         self.agents.clear();
         self.agents.reserve(new_len);
     }
@@ -276,8 +300,7 @@ mod tests {
         let b = make_agent(2, 1.0, Vec2::new(2.0 + eps, 0.0), Vec2::new(-1.0, 0.0));
 
         let t = a.solve_collision(&b).unwrap();
-        let expected = eps / 2.0;
-        assert_relative_eq!(t, expected, max_relative = 1e-3);
+        assert_relative_eq!(t, eps / 2.0);
     }
 
     #[test]

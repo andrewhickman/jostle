@@ -1,7 +1,12 @@
+#[cfg(feature = "diagnostic")]
+pub mod diagnostic;
+
 mod agent;
 mod layer;
 mod tile;
 
+#[cfg(feature = "diagnostic")]
+use bevy::diagnostic::{Diagnostic, RegisterDiagnostic};
 use bevy::prelude::*;
 
 pub use self::agent::{Agent, Velocity};
@@ -21,12 +26,24 @@ impl Plugin for JostlePlugin {
 
         app.add_systems(
             FixedPostUpdate,
-            layer::process_collisions.in_set(JostleSystems),
+            (layer::broad_phase, layer::narrow_phase)
+                .chain_ignore_deferred()
+                .in_set(JostleSystems),
         );
 
         app.add_systems(
             RunFixedMainLoop,
             agent::update_render_position.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
         );
+
+        #[cfg(feature = "diagnostic")]
+        for name in [diagnostic::BROAD_PHASE, diagnostic::NARROW_PHASE] {
+            app.register_diagnostic(
+                Diagnostic::new(name)
+                    .with_suffix("ms")
+                    .with_max_history_length(32)
+                    .with_smoothing_factor(0.06),
+            );
+        }
     }
 }
