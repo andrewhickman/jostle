@@ -1,5 +1,3 @@
-#[cfg(feature = "diagnostic")]
-use bevy::diagnostic::Diagnostics;
 use bevy::{
     ecs::entity::EntityHashSet, math::FloatOrd, platform::collections::HashMap, prelude::*,
 };
@@ -35,11 +33,7 @@ pub struct LayerAgents(EntityHashSet);
 pub(crate) fn broad_phase(
     mut layers: Query<(&mut Layer, &LayerAgents, &GlobalTransform)>,
     agents: Query<(Entity, &Agent, &Position, &Velocity), With<Agent>>,
-    #[cfg(feature = "diagnostic")] mut diagnostics: Diagnostics,
 ) {
-    #[cfg(feature = "diagnostic")]
-    let start = std::time::Instant::now();
-
     layers
         .par_iter_mut()
         .for_each(|(mut layer, layer_agents, layer_transform)| {
@@ -59,11 +53,6 @@ pub(crate) fn broad_phase(
                 ));
             }
         });
-
-    #[cfg(feature = "diagnostic")]
-    diagnostics.add_measurement(&crate::diagnostic::BROAD_PHASE, || {
-        start.elapsed().as_secs_f64() * 1000.
-    });
 }
 
 pub(crate) fn narrow_phase(
@@ -80,20 +69,12 @@ pub(crate) fn narrow_phase(
         With<Agent>,
     >,
     time: Res<Time>,
-    #[cfg(feature = "diagnostic")] mut diagnostics: Diagnostics,
 ) {
-    #[cfg(feature = "diagnostic")]
-    let start = std::time::Instant::now();
-
-    let max_speed = 0.5 / time.delta_secs();
-
     agents.par_iter_mut().for_each(
         |(id, agent, mut transform, position, mut velocity, layer_id)| {
             if velocity.0 == Vec2::ZERO {
                 return;
             }
-
-            velocity.0 = velocity.0.clamp_length_max(max_speed);
 
             if let Ok((layer, layer_transform)) = layers.get(layer_id.0) {
                 let agent = LayerAgent::new(
@@ -130,11 +111,6 @@ pub(crate) fn narrow_phase(
             }
         },
     );
-
-    #[cfg(feature = "diagnostic")]
-    diagnostics.add_measurement(&crate::diagnostic::NARROW_PHASE, || {
-        start.elapsed().as_secs_f64() * 1000.
-    });
 }
 
 impl Layer {

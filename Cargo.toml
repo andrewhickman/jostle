@@ -20,6 +20,7 @@ smallvec = "1.15.1"
 [dev-dependencies]
 approx = "0.5.1"
 bevy = { version = "0.17.2", default-features = false, features = [
+  "bevy_log",
   "bevy_sprite_render",
   "bevy_winit",
 ] }

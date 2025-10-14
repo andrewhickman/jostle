@@ -26,7 +26,16 @@ impl Plugin for JostlePlugin {
 
         app.add_systems(
             FixedPostUpdate,
-            (layer::broad_phase, layer::narrow_phase)
+            (
+                #[cfg(feature = "diagnostic")]
+                diagnostic::measure(diagnostic::BROAD_PHASE, layer::broad_phase),
+                #[cfg(not(feature = "diagnostic"))]
+                layer::broad_phase,
+                #[cfg(feature = "diagnostic")]
+                diagnostic::measure(diagnostic::NARROW_PHASE, layer::narrow_phase),
+                #[cfg(not(feature = "diagnostic"))]
+                layer::narrow_phase,
+            )
                 .chain_ignore_deferred()
                 .in_set(JostleSystems),
         );
@@ -37,9 +46,9 @@ impl Plugin for JostlePlugin {
         );
 
         #[cfg(feature = "diagnostic")]
-        for name in [diagnostic::BROAD_PHASE, diagnostic::NARROW_PHASE] {
+        for path in [diagnostic::BROAD_PHASE, diagnostic::NARROW_PHASE] {
             app.register_diagnostic(
-                Diagnostic::new(name)
+                Diagnostic::new(path)
                     .with_suffix("ms")
                     .with_max_history_length(32)
                     .with_smoothing_factor(0.06),
