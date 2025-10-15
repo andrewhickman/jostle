@@ -1,40 +1,67 @@
+//! A deliberately simple and performant 2D physics library for Bevy, designed for top-down games with large crowds of colliding units.
+
 #[cfg(feature = "diagnostic")]
 pub mod diagnostic;
 
 mod agent;
+mod collision;
 mod layer;
+mod position;
 mod tile;
 
-#[cfg(feature = "diagnostic")]
-use bevy::diagnostic::{Diagnostic, RegisterDiagnostic};
 use bevy::prelude::*;
+
+use crate::tile::TileChanged;
 
 pub use self::agent::{Agent, Velocity};
 pub use self::layer::{InLayer, Layer, LayerAgents};
 
-/// Plugin for adding [jostle](crate) functionality to an app.
+/// Plugin for adding [`jostle`](crate) functionality to an app.
 #[derive(Debug, Default)]
 pub struct JostlePlugin;
 
-/// System set for [jostle](crate) in the [FixedPostUpdate] schedule.
+/// The [`SystemSet`] containing [`jostle`](crate) systems in the [`FixedPostUpdate`] schedule.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct JostleSystems;
 
+macro_rules! measure {
+    ($path:expr, $system:path) => {{
+        #[cfg(feature = "diagnostic")]
+        {
+            crate::diagnostic::measure($path, $system)
+        }
+
+        #[cfg(not(feature = "diagnostic"))]
+        {
+            $system
+        }
+    }};
+}
+
 impl Plugin for JostlePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedFirst, agent::update_physical_position);
+        app.add_message::<TileChanged>();
+
+        app.add_systems(
+            FixedFirst,
+            measure!(
+                diagnostic::UPDATE_PHYSICAL_POSITION,
+                position::update_physical
+            ),
+        );
 
         app.add_systems(
             FixedPostUpdate,
             (
-                #[cfg(feature = "diagnostic")]
-                diagnostic::measure(diagnostic::BROAD_PHASE, layer::broad_phase),
-                #[cfg(not(feature = "diagnostic"))]
-                layer::broad_phase,
-                #[cfg(feature = "diagnostic")]
-                diagnostic::measure(diagnostic::NARROW_PHASE, layer::narrow_phase),
-                #[cfg(not(feature = "diagnostic"))]
-                layer::narrow_phase,
+                measure!(
+                    diagnostic::UPDATE_RELATIVE_POSITION,
+                    position::update_relative
+                ),
+                measure!(diagnostic::UPDATE_COLLISION_INDEX, collision::update_index),
+                measure!(
+                    diagnostic::RESOLVE_COLLISION_CONTACTS,
+                    collision::resolve_contacts
+                ),
             )
                 .chain_ignore_deferred()
                 .in_set(JostleSystems),
@@ -42,17 +69,11 @@ impl Plugin for JostlePlugin {
 
         app.add_systems(
             RunFixedMainLoop,
-            agent::update_render_position.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
+            (measure!(diagnostic::UPDATE_RENDER_POSITION, position::update_render))
+                .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
         );
 
         #[cfg(feature = "diagnostic")]
-        for path in [diagnostic::BROAD_PHASE, diagnostic::NARROW_PHASE] {
-            app.register_diagnostic(
-                Diagnostic::new(path)
-                    .with_suffix("ms")
-                    .with_max_history_length(32)
-                    .with_smoothing_factor(0.06),
-            );
-        }
+        diagnostic::register(app);
     }
 }

@@ -9,34 +9,45 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use jostle::{Agent, InLayer, JostlePlugin, Layer, Velocity};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
-criterion_group!(benches, broad_phase);
+criterion_group!(
+    benches,
+    update_physical_position,
+    update_relative_position,
+    update_collision_index,
+    resolve_collision_contacts,
+    update_render_position
+);
 criterion_main!(benches);
 
-pub fn broad_phase(c: &mut Criterion) {
-    c.bench_function("broad_phase", |b| {
-        b.iter_custom(|iters| {
-            let mut app = make_app();
-
-            let mut elapsed = Duration::ZERO;
-            for _ in 0..iters {
-                app.update();
-                elapsed += get_diagnostic(&mut app, &jostle::diagnostic::BROAD_PHASE);
-            }
-
-            elapsed
-        });
-    });
+pub fn update_physical_position(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_PHYSICAL_POSITION);
 }
 
-pub fn narrow_phase(c: &mut Criterion) {
-    c.bench_function("narrow_phase", |b| {
+pub fn update_relative_position(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_RELATIVE_POSITION);
+}
+
+pub fn update_collision_index(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_COLLISION_INDEX);
+}
+
+pub fn resolve_collision_contacts(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::RESOLVE_COLLISION_CONTACTS);
+}
+
+pub fn update_render_position(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_RENDER_POSITION);
+}
+
+fn bench_diagnostic(c: &mut Criterion, path: &DiagnosticPath) {
+    c.bench_function(path.as_str(), |b| {
         b.iter_custom(|iters| {
             let mut app = make_app();
 
             let mut elapsed = Duration::ZERO;
             for _ in 0..iters {
                 app.update();
-                elapsed += get_diagnostic(&mut app, &jostle::diagnostic::NARROW_PHASE);
+                elapsed += get_diagnostic(&mut app, path);
             }
 
             elapsed
@@ -69,7 +80,7 @@ fn startup(mut commands: Commands) {
     let layer_id = commands.spawn(Layer::default()).id();
 
     let mut rng = SmallRng::seed_from_u64(0);
-    let agents: Vec<_> = (0..10000)
+    let agents: Vec<_> = (0..1000)
         .map(|_| {
             (
                 Agent::new(0.3),

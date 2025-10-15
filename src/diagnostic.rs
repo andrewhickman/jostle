@@ -1,12 +1,39 @@
+//! Constants for accessing diagnostic information about the performance of [`jostle`](crate) systems.
+
 use std::time::Instant;
 
 use bevy::{
-    diagnostic::{DiagnosticPath, Diagnostics},
+    diagnostic::{Diagnostic, DiagnosticPath, Diagnostics, RegisterDiagnostic},
     prelude::*,
 };
 
-pub const BROAD_PHASE: DiagnosticPath = DiagnosticPath::const_new("jostle/broad_phase");
-pub const NARROW_PHASE: DiagnosticPath = DiagnosticPath::const_new("jostle/narrow_phase");
+pub const UPDATE_PHYSICAL_POSITION: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_physical_position");
+pub const UPDATE_RELATIVE_POSITION: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_relative_position");
+pub const UPDATE_RENDER_POSITION: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_render_position");
+pub const UPDATE_COLLISION_INDEX: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_collision_index");
+pub const RESOLVE_COLLISION_CONTACTS: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/resolve_collision_contacts");
+
+pub(crate) fn register(app: &mut App) {
+    for path in [
+        UPDATE_PHYSICAL_POSITION,
+        UPDATE_RELATIVE_POSITION,
+        UPDATE_RENDER_POSITION,
+        UPDATE_COLLISION_INDEX,
+        RESOLVE_COLLISION_CONTACTS,
+    ] {
+        app.register_diagnostic(
+            Diagnostic::new(path)
+                .with_suffix("ms")
+                .with_max_history_length(32)
+                .with_smoothing_factor(0.06),
+        );
+    }
+}
 
 pub(crate) fn measure<S, M>(
     path: DiagnosticPath,
@@ -29,4 +56,5 @@ where
 
         result
     })
+    .with_name(DebugName::type_name::<S>())
 }

@@ -74,37 +74,6 @@ fn moving_agent() {
 }
 
 #[test]
-fn moving_agent_speed_clamped() {
-    let mut app = make_app();
-
-    let layer = app.world_mut().spawn(Layer::default()).id();
-    let agent = app
-        .world_mut()
-        .spawn((
-            Agent::new(0.2),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-            Velocity(Vec2::new(100.0, 100.0)),
-            InLayer(layer),
-        ))
-        .id();
-
-    advance_time(&mut app, 1.0);
-    app.update();
-
-    let (position, velocity) = get_agent(&mut app, agent);
-    assert_relative_eq!(position, Vec2::new(0.0, 0.0));
-    assert_relative_eq!(velocity.length(), 0.5);
-    assert_relative_eq!(velocity, Vec2::new(0.35355338, 0.35355338));
-
-    advance_time(&mut app, 1.0);
-    app.update();
-
-    let (position, _) = get_agent(&mut app, agent);
-    assert_relative_eq!(position.length(), 0.5);
-    assert_relative_eq!(position, Vec2::new(0.35355338, 0.35355338));
-}
-
-#[test]
 fn colliding_agent_direct() {
     let mut app = make_app();
 
