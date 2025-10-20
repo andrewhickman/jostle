@@ -29,7 +29,7 @@ pub(crate) enum PositionState {
     Render,
     // The agent's transform is its physical position.
     Physical {
-        // The physical position at the start of the fixed update.
+        // The physical position at the start of the current fixed update.
         start: Vec2,
         // Accumulated change to the physical position since the last GlobalTransform update.
         delta: Vec2,
@@ -50,6 +50,11 @@ impl Position {
         self.tile.expect("position not updated").tile
     }
 
+    #[cfg(test)]
+    pub(crate) fn layer(&self) -> Entity {
+        self.tile.expect("position not updated").layer
+    }
+
     fn on_replace(mut world: DeferredWorld, context: HookContext) {
         let position = world.entity(context.entity).get::<Position>().unwrap();
         if let Some(tile) = position.tile {
@@ -63,9 +68,9 @@ impl Position {
 }
 
 impl PositionState {
-    fn delta(&self) -> Vec2 {
+    fn delta(&self, position: Vec2) -> Vec2 {
         match *self {
-            PositionState::Physical { delta, .. } => delta,
+            PositionState::Physical { start, delta, .. } => delta + position - start,
             _ => panic!("PositionState::delta() called outside FixedUpdate"),
         }
     }
@@ -98,14 +103,15 @@ pub(crate) fn update_physical(mut agents: Query<(&mut Transform, &mut PositionSt
 }
 
 pub(crate) fn update_relative(
-    layers: Query<&GlobalTransform, With<Layer>>,
+    layers: Query<(&Layer, &GlobalTransform)>,
     mut agents: Query<(
         Entity,
         &Agent,
+        &Transform,
+        &GlobalTransform,
         &mut Position,
         &PositionState,
         &Velocity,
-        &GlobalTransform,
         &InLayer,
     )>,
     tile_writer: MessageWriter<TileChanged>,
@@ -113,14 +119,15 @@ pub(crate) fn update_relative(
     let tile_writer = Mutex::new(tile_writer);
 
     agents.par_iter_mut().for_each(
-        |(id, agent, mut position, state, velocity, transform, layer_id)| {
-            if let Ok(layer_transform) = layers.get(layer_id.0) {
-                let mut relative_transform = transform.reparented_to(layer_transform);
-                relative_transform.translation += state.delta().extend(0.);
+        |(id, agent, transform, global_transform, mut position, state, velocity, layer_id)| {
+            if let Ok((layer, layer_transform)) = layers.get(layer_id.0) {
+                let mut relative_transform = global_transform.reparented_to(layer_transform);
+                relative_transform.translation +=
+                    state.delta(transform.translation.xy()).extend(0.);
 
                 let new_tile = LayerTile {
                     layer: layer_id.0,
-                    tile: Tile::new(relative_transform.translation.xy()),
+                    tile: layer.tile(relative_transform.translation.xy()),
                 };
                 if position.tile != Some(new_tile) {
                     tile_writer.lock().unwrap().write(TileChanged {
@@ -186,24 +193,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn agent_inserted_physics_update() {
+    fn agent_inserted_physical_update() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(1.5, -2.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
 
+        let tile_updates = get_tile_updates(&mut app);
         let (new_transform, position, state) = get_position(&mut app, agent);
 
         assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.5, -2.0));
         assert_relative_eq!(position.position, Vec2::new(1.5, -2.0));
+        assert_eq!(position.tile(), Tile::new(1, -2));
+        assert_relative_eq!(position.velocity, Vec2::ZERO);
+        assert_relative_eq!(position.radius, 0.3);
 
         match *state {
             PositionState::Physical { start, delta } => {
                 assert_relative_eq!(start, Vec2::new(1.5, -2.0));
                 assert_relative_eq!(delta, Vec2::ZERO);
             }
-            _ => panic!("expected Physical position state"),
+            _ => panic!("expected Physical position state, got {state:?}"),
         }
+
+        assert_eq!(tile_updates.len(), 1);
+        assert_eq!(tile_updates[0].agent, agent);
+        assert_eq!(tile_updates[0].old, None);
+        assert_eq!(
+            tile_updates[0].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(1, -2),
+            })
+        );
     }
 
     #[test]
@@ -219,56 +241,100 @@ mod tests {
 
         match *state {
             PositionState::Render => {}
-            _ => panic!("expected Physical position"),
+            _ => panic!("expected Physical position, got {state:?}"),
         }
     }
 
     #[test]
-    fn physics_update() {
+    fn physical_update() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.5);
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
 
+        let tile_updates = get_tile_updates(&mut app);
         let (new_transform, position, state) = get_position(&mut app, agent);
 
         assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.0, 1.0));
         assert_relative_eq!(position.position, Vec2::new(1.0, 1.0));
+        assert_eq!(position.tile(), Tile::new(1, 1));
 
         match *state {
             PositionState::Physical { start, delta } => {
                 assert_relative_eq!(start, Vec2::new(1.0, 1.0));
                 assert_relative_eq!(delta, Vec2::new(0.5, 0.5));
             }
-            _ => panic!("expected Physical position"),
+            _ => panic!("expected Physical position, got {state:?}"),
         }
+
+        assert_eq!(tile_updates.len(), 2);
+        assert_eq!(tile_updates[0].agent, agent);
+        assert_eq!(tile_updates[0].old, None);
+        assert_eq!(
+            tile_updates[0].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(0, 0),
+            })
+        );
+        assert_eq!(tile_updates[1].agent, agent);
+        assert_eq!(tile_updates[1].old, tile_updates[0].new);
+        assert_eq!(
+            tile_updates[1].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(1, 1),
+            })
+        );
     }
 
     #[test]
-    fn consecutive_physics_updates() {
+    fn consecutive_physical_updates() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(1.5, -2.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, -1.0));
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
 
+        let tile_updates = get_tile_updates(&mut app);
         let (new_transform, position, state) = get_position(&mut app, agent);
 
         assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.0, -1.0));
         assert_relative_eq!(position.position, Vec2::new(1.0, -1.0));
+        assert_eq!(position.tile(), Tile::new(1, -1));
 
         match *state {
             PositionState::Physical { start, delta } => {
                 assert_relative_eq!(start, Vec2::new(1.0, -1.0));
                 assert_relative_eq!(delta, Vec2::new(-0.5, 1.0));
             }
-            _ => panic!("expected Physical position state"),
+            _ => panic!("expected Physical position state, got {state:?}"),
         }
+
+        assert_eq!(tile_updates.len(), 2);
+        assert_eq!(tile_updates[0].agent, agent);
+        assert_eq!(tile_updates[0].old, None);
+        assert_eq!(
+            tile_updates[0].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(1, -2),
+            })
+        );
+        assert_eq!(tile_updates[1].agent, agent);
+        assert_eq!(tile_updates[1].old, tile_updates[0].new);
+        assert_eq!(
+            tile_updates[1].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(1, -1),
+            })
+        );
     }
 
     #[test]
@@ -276,7 +342,7 @@ mod tests {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, 1.0));
 
         run_render_update(&mut app, 0.5);
@@ -295,7 +361,29 @@ mod tests {
                 assert_relative_eq!(end, Vec2::new(1.0, 1.0));
                 assert_eq!(change_tick, new_transform.last_changed());
             }
-            _ => panic!("expected Interpolated position state"),
+            _ => panic!("expected Interpolated position state, got {state:?}"),
+        }
+
+        run_physical_update(&mut app);
+        update_position(&mut app, agent, Vec2::new(2.0, 2.0));
+
+        run_render_update(&mut app, 0.0);
+
+        let (new_transform, _, state) = get_position(&mut app, agent);
+
+        assert_relative_eq!(new_transform.translation.xy(), Vec2::new(1.5, 1.5));
+
+        match *state {
+            PositionState::Interpolated {
+                start,
+                end,
+                change_tick,
+            } => {
+                assert_relative_eq!(start, Vec2::new(1.0, 1.0));
+                assert_relative_eq!(end, Vec2::new(2.0, 2.0));
+                assert_eq!(change_tick, new_transform.last_changed());
+            }
+            _ => panic!("expected Interpolated position state, got {state:?}"),
         }
     }
 
@@ -304,7 +392,7 @@ mod tests {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, 1.0));
 
         run_render_update(&mut app, 0.3);
@@ -324,36 +412,58 @@ mod tests {
                 assert_relative_eq!(end, Vec2::new(1.0, 1.0));
                 assert_eq!(change_tick, new_transform.last_changed());
             }
-            _ => panic!("expected Physical position state"),
+            _ => panic!("expected Physical position state, got {state:?}"),
         }
     }
 
     #[test]
-    fn transform_modified_physics_update() {
+    fn transform_modified_physical_update() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.5);
 
         update_position(&mut app, agent, Vec2::new(2.0, 2.0));
         run_transform_propagation(&mut app);
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
 
+        let tile_updates = get_tile_updates(&mut app);
         let (new_transform, position, state) = get_position(&mut app, agent);
 
         assert_relative_eq!(new_transform.translation.xy(), Vec2::new(2.0, 2.0));
         assert_relative_eq!(position.position, Vec2::new(2.0, 2.0));
+        assert_eq!(position.tile(), Tile::new(2, 2));
 
         match *state {
             PositionState::Physical { start, delta } => {
                 assert_relative_eq!(start, Vec2::new(2.0, 2.0));
                 assert_relative_eq!(delta, Vec2::ZERO);
             }
-            _ => panic!("expected Physical position state"),
+            _ => panic!("expected Physical position state, got {state:?}"),
         }
+
+        assert_eq!(tile_updates.len(), 2);
+        assert_eq!(tile_updates[0].agent, agent);
+        assert_eq!(tile_updates[0].old, None);
+        assert_eq!(
+            tile_updates[0].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(0, 0),
+            })
+        );
+        assert_eq!(tile_updates[1].agent, agent);
+        assert_eq!(tile_updates[1].old, tile_updates[0].new);
+        assert_eq!(
+            tile_updates[1].new,
+            Some(LayerTile {
+                layer: position.layer(),
+                tile: Tile::new(2, 2),
+            })
+        );
     }
 
     #[test]
@@ -361,7 +471,7 @@ mod tests {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0));
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         update_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.3);
 
@@ -376,7 +486,7 @@ mod tests {
 
         match *state {
             PositionState::Render => {}
-            _ => panic!("expected Render position state"),
+            _ => panic!("expected Render position state, got {state:?}"),
         }
     }
 
@@ -387,7 +497,7 @@ mod tests {
 
         let initial_transform_tick = get_position(&mut app, agent).0.last_changed();
 
-        run_physics_update(&mut app);
+        run_physical_update(&mut app);
         run_render_update(&mut app, 0.3);
 
         let (new_transform, _, state) = get_position(&mut app, agent);
@@ -397,7 +507,7 @@ mod tests {
 
         match *state {
             PositionState::Render => {}
-            _ => panic!("expected Render position state"),
+            _ => panic!("expected Render position state, got {state:?}"),
         }
     }
 
@@ -424,7 +534,7 @@ mod tests {
             .id()
     }
 
-    fn run_physics_update(app: &mut App) {
+    fn run_physical_update(app: &mut App) {
         app.world_mut()
             .resource_mut::<Time<Virtual>>()
             .advance_by(Duration::from_secs_f32(1.0));
@@ -459,5 +569,11 @@ mod tests {
             .query::<(Ref<Transform>, &Position, &PositionState)>()
             .get(world, id)
             .unwrap()
+    }
+
+    fn get_tile_updates(app: &mut App) -> Vec<TileChanged> {
+        let world = app.world_mut();
+        let messages = world.resource::<Messages<TileChanged>>();
+        messages.get_cursor().read(&messages).cloned().collect()
     }
 }

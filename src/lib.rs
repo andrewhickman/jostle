@@ -57,11 +57,8 @@ impl Plugin for JostlePlugin {
                     diagnostic::UPDATE_RELATIVE_POSITION,
                     position::update_relative
                 ),
-                measure!(diagnostic::UPDATE_COLLISION_INDEX, collision::update_index),
-                measure!(
-                    diagnostic::RESOLVE_COLLISION_CONTACTS,
-                    collision::resolve_contacts
-                ),
+                measure!(diagnostic::UPDATE_TILE_INDEX, tile::update_index),
+                measure!(diagnostic::PROCESS_COLLISIONS, collision::process),
             )
                 .chain_ignore_deferred()
                 .in_set(JostleSystems),

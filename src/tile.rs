@@ -20,30 +20,53 @@ pub(crate) struct TileIndex {
     index: HashMap<Tile, SmallVec<[Entity; 4]>>,
 }
 
-#[derive(Debug, Message)]
+#[derive(Clone, Debug, Message)]
 pub(crate) struct TileChanged {
     pub(crate) agent: Entity,
     pub(crate) old: Option<LayerTile>,
     pub(crate) new: Option<LayerTile>,
 }
 
+pub(crate) fn update_index(
+    mut indices: Query<&mut TileIndex>,
+    mut tile_reader: MessageReader<TileChanged>,
+) {
+    for event in tile_reader.read() {
+        if let Some(old) = event.old {
+            if let Ok(mut index) = indices.get_mut(old.layer) {
+                index.remove_agent(event.agent, old.tile);
+            }
+        }
+
+        if let Some(new) = event.new {
+            if let Ok(mut index) = indices.get_mut(new.layer) {
+                index.insert_agent(event.agent, new.tile);
+            }
+        }
+    }
+}
+
 impl Tile {
-    pub(crate) fn new(position: Vec2) -> Self {
+    pub(crate) fn new(x: i32, y: i32) -> Self {
+        Tile(IVec2::new(x, y))
+    }
+
+    pub(crate) fn floor(position: Vec2) -> Self {
         Tile(position.floor().as_ivec2())
     }
 
     pub(crate) fn neighbourhood(&self) -> [Tile; 9] {
         let &Tile(IVec2 { x, y }) = self;
         [
-            Tile(IVec2::new(x - 1, y - 1)),
-            Tile(IVec2::new(x, y - 1)),
-            Tile(IVec2::new(x + 1, y - 1)),
-            Tile(IVec2::new(x - 1, y)),
-            Tile(IVec2::new(x, y)),
-            Tile(IVec2::new(x + 1, y)),
-            Tile(IVec2::new(x - 1, y + 1)),
-            Tile(IVec2::new(x, y + 1)),
-            Tile(IVec2::new(x + 1, y + 1)),
+            Tile::new(x - 1, y - 1),
+            Tile::new(x, y - 1),
+            Tile::new(x + 1, y - 1),
+            Tile::new(x - 1, y),
+            Tile::new(x, y),
+            Tile::new(x + 1, y),
+            Tile::new(x - 1, y + 1),
+            Tile::new(x, y + 1),
+            Tile::new(x + 1, y + 1),
         ]
     }
 }
@@ -58,13 +81,13 @@ impl fmt::Debug for Tile {
 }
 
 impl TileIndex {
-    pub(crate) fn insert_agent(&mut self, id: Entity, center: Tile) {
+    fn insert_agent(&mut self, id: Entity, center: Tile) {
         for tile in center.neighbourhood() {
             self.index.entry(tile).or_default().push(id);
         }
     }
 
-    pub(crate) fn remove_agent(&mut self, id: Entity, center: Tile) {
+    fn remove_agent(&mut self, id: Entity, center: Tile) {
         for tile in center.neighbourhood() {
             match self.index.entry(tile) {
                 hash_map::Entry::Vacant(_) => {}
@@ -97,31 +120,31 @@ mod tests {
 
     #[test]
     fn constructor() {
-        let tile = Tile::new(Vec2::new(1.2, -3.7));
+        let tile = Tile::floor(Vec2::new(1.2, -3.7));
         assert_eq!(tile, Tile(IVec2::new(1, -4)));
     }
 
     #[test]
     fn constructor_zero() {
-        let t = Tile::new(Vec2::ZERO);
+        let t = Tile::floor(Vec2::ZERO);
         assert_eq!(t, Tile(IVec2::new(0, 0)));
     }
 
     #[test]
     fn constructor_positive_fractional() {
-        let t = Tile::new(Vec2::new(0.9999, 0.0001));
+        let t = Tile::floor(Vec2::new(0.9999, 0.0001));
         assert_eq!(t, Tile(IVec2::new(0, 0)));
     }
 
     #[test]
     fn constructor_exact_integers() {
-        let t = Tile::new(Vec2::new(2.0, -3.0));
+        let t = Tile::floor(Vec2::new(2.0, -3.0));
         assert_eq!(t, Tile(IVec2::new(2, -3)));
     }
 
     #[test]
     fn constructor_negative_fractional() {
-        let t = Tile::new(Vec2::new(-0.0001, -0.9999));
+        let t = Tile::floor(Vec2::new(-0.0001, -0.9999));
         assert_eq!(t, Tile(IVec2::new(-1, -1)));
     }
 

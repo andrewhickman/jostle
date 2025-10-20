@@ -1,31 +1,8 @@
 use bevy::{math::FloatOrd, prelude::*};
 
-use crate::{
-    Agent, InLayer, Velocity,
-    position::Position,
-    tile::{TileChanged, TileIndex},
-};
+use crate::{Agent, InLayer, Velocity, position::Position, tile::TileIndex};
 
-pub(crate) fn update_index(
-    mut indices: Query<&mut TileIndex>,
-    mut tile_reader: MessageReader<TileChanged>,
-) {
-    for event in tile_reader.read() {
-        if let Some(old) = event.old {
-            if let Ok(mut index) = indices.get_mut(old.layer) {
-                index.remove_agent(event.agent, old.tile);
-            }
-        }
-
-        if let Some(new) = event.new {
-            if let Ok(mut index) = indices.get_mut(new.layer) {
-                index.insert_agent(event.agent, new.tile);
-            }
-        }
-    }
-}
-
-pub(crate) fn resolve_contacts(
+pub(crate) fn process(
     indices: Query<&TileIndex>,
     mut agents: Query<(Entity, &mut Transform, &Position, &mut Velocity, &InLayer), With<Agent>>,
     targets: Query<&Position, With<Agent>>,

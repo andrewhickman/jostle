@@ -13,8 +13,8 @@ criterion_group!(
     benches,
     update_physical_position,
     update_relative_position,
-    update_collision_index,
-    resolve_collision_contacts,
+    update_tile_index,
+    process_collisions,
     update_render_position
 );
 criterion_main!(benches);
@@ -27,12 +27,12 @@ pub fn update_relative_position(c: &mut Criterion) {
     bench_diagnostic(c, &jostle::diagnostic::UPDATE_RELATIVE_POSITION);
 }
 
-pub fn update_collision_index(c: &mut Criterion) {
-    bench_diagnostic(c, &jostle::diagnostic::UPDATE_COLLISION_INDEX);
+pub fn update_tile_index(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_TILE_INDEX);
 }
 
-pub fn resolve_collision_contacts(c: &mut Criterion) {
-    bench_diagnostic(c, &jostle::diagnostic::RESOLVE_COLLISION_CONTACTS);
+pub fn process_collisions(c: &mut Criterion) {
+    bench_diagnostic(c, &jostle::diagnostic::PROCESS_COLLISIONS);
 }
 
 pub fn update_render_position(c: &mut Criterion) {

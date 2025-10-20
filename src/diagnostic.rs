@@ -13,18 +13,17 @@ pub const UPDATE_RELATIVE_POSITION: DiagnosticPath =
     DiagnosticPath::const_new("jostle/update_relative_position");
 pub const UPDATE_RENDER_POSITION: DiagnosticPath =
     DiagnosticPath::const_new("jostle/update_render_position");
-pub const UPDATE_COLLISION_INDEX: DiagnosticPath =
-    DiagnosticPath::const_new("jostle/update_collision_index");
-pub const RESOLVE_COLLISION_CONTACTS: DiagnosticPath =
-    DiagnosticPath::const_new("jostle/resolve_collision_contacts");
+pub const UPDATE_TILE_INDEX: DiagnosticPath = DiagnosticPath::const_new("jostle/update_tile_index");
+pub const PROCESS_COLLISIONS: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/process_collisions");
 
 pub(crate) fn register(app: &mut App) {
     for path in [
         UPDATE_PHYSICAL_POSITION,
         UPDATE_RELATIVE_POSITION,
         UPDATE_RENDER_POSITION,
-        UPDATE_COLLISION_INDEX,
-        RESOLVE_COLLISION_CONTACTS,
+        UPDATE_TILE_INDEX,
+        PROCESS_COLLISIONS,
     ] {
         app.register_diagnostic(
             Diagnostic::new(path)
