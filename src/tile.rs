@@ -1,70 +1,82 @@
-use std::fmt;
-
 use bevy::{
     platform::collections::{HashMap, hash_map},
     prelude::*,
 };
 use smallvec::SmallVec;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct Tile(IVec2);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Tile(Entity, IVec2);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct LayerTile {
-    pub(crate) layer: Entity,
-    pub(crate) tile: Tile,
-}
-
-#[derive(Component, Default, Debug)]
+#[derive(Resource, Default, Debug)]
 pub(crate) struct TileIndex {
     index: HashMap<Tile, SmallVec<[Entity; 4]>>,
 }
 
-#[derive(Debug, Message)]
+#[derive(Clone, Debug, Message)]
 pub(crate) struct TileChanged {
     pub(crate) agent: Entity,
-    pub(crate) old: Option<LayerTile>,
-    pub(crate) new: Option<LayerTile>,
+    pub(crate) old: Option<Tile>,
+    pub(crate) new: Option<Tile>,
+}
+
+pub(crate) fn update_index(
+    mut index: ResMut<TileIndex>,
+    mut tile_reader: MessageReader<TileChanged>,
+) {
+    for event in tile_reader.read() {
+        if let Some(old) = event.old {
+            index.remove_agent(event.agent, old);
+        }
+
+        if let Some(new) = event.new {
+            index.insert_agent(event.agent, new);
+        }
+    }
 }
 
 impl Tile {
-    pub(crate) fn new(position: Vec2) -> Self {
-        Tile(position.floor().as_ivec2())
+    pub(crate) fn new(layer: Entity, x: i32, y: i32) -> Self {
+        Tile(layer, IVec2::new(x, y))
+    }
+
+    pub(crate) fn floor(layer: Entity, position: Vec2, tile_size: f32) -> Self {
+        Tile(layer, (position / tile_size).floor().as_ivec2())
+    }
+
+    pub(crate) fn layer(&self) -> Entity {
+        self.0
+    }
+
+    pub(crate) fn tile(&self) -> IVec2 {
+        self.1
     }
 
     pub(crate) fn neighbourhood(&self) -> [Tile; 9] {
-        let &Tile(IVec2 { x, y }) = self;
+        let layer = self.layer();
+        let IVec2 { x, y } = self.tile();
+
         [
-            Tile(IVec2::new(x - 1, y - 1)),
-            Tile(IVec2::new(x, y - 1)),
-            Tile(IVec2::new(x + 1, y - 1)),
-            Tile(IVec2::new(x - 1, y)),
-            Tile(IVec2::new(x, y)),
-            Tile(IVec2::new(x + 1, y)),
-            Tile(IVec2::new(x - 1, y + 1)),
-            Tile(IVec2::new(x, y + 1)),
-            Tile(IVec2::new(x + 1, y + 1)),
+            Tile::new(layer, x - 1, y - 1),
+            Tile::new(layer, x, y - 1),
+            Tile::new(layer, x + 1, y - 1),
+            Tile::new(layer, x - 1, y),
+            Tile::new(layer, x, y),
+            Tile::new(layer, x + 1, y),
+            Tile::new(layer, x - 1, y + 1),
+            Tile::new(layer, x, y + 1),
+            Tile::new(layer, x + 1, y + 1),
         ]
     }
 }
 
-impl fmt::Debug for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Tile")
-            .field(&self.0.x)
-            .field(&self.0.y)
-            .finish()
-    }
-}
-
 impl TileIndex {
-    pub(crate) fn insert_agent(&mut self, id: Entity, center: Tile) {
+    fn insert_agent(&mut self, id: Entity, center: Tile) {
         for tile in center.neighbourhood() {
             self.index.entry(tile).or_default().push(id);
         }
     }
 
-    pub(crate) fn remove_agent(&mut self, id: Entity, center: Tile) {
+    fn remove_agent(&mut self, id: Entity, center: Tile) {
         for tile in center.neighbourhood() {
             match self.index.entry(tile) {
                 hash_map::Entry::Vacant(_) => {}
@@ -97,41 +109,48 @@ mod tests {
 
     #[test]
     fn constructor() {
-        let tile = Tile::new(Vec2::new(1.2, -3.7));
-        assert_eq!(tile, Tile(IVec2::new(1, -4)));
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(1.2, -3.7), 1.0);
+        assert_eq!(tile.tile(), IVec2::new(1, -4));
     }
 
     #[test]
     fn constructor_zero() {
-        let t = Tile::new(Vec2::ZERO);
-        assert_eq!(t, Tile(IVec2::new(0, 0)));
+        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::ZERO, 1.0);
+        assert_eq!(t.tile(), IVec2::new(0, 0));
     }
 
     #[test]
     fn constructor_positive_fractional() {
-        let t = Tile::new(Vec2::new(0.9999, 0.0001));
-        assert_eq!(t, Tile(IVec2::new(0, 0)));
+        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(0.9999, 0.0001), 1.0);
+        assert_eq!(t.tile(), IVec2::new(0, 0));
     }
 
     #[test]
     fn constructor_exact_integers() {
-        let t = Tile::new(Vec2::new(2.0, -3.0));
-        assert_eq!(t, Tile(IVec2::new(2, -3)));
+        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.0, -3.0), 1.0);
+        assert_eq!(t.tile(), IVec2::new(2, -3));
     }
 
     #[test]
     fn constructor_negative_fractional() {
-        let t = Tile::new(Vec2::new(-0.0001, -0.9999));
-        assert_eq!(t, Tile(IVec2::new(-1, -1)));
+        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(-0.0001, -0.9999), 1.0);
+        assert_eq!(t.tile(), IVec2::new(-1, -1));
+    }
+
+    #[test]
+    fn constructor_custom_tile_size() {
+        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 0.5);
+        assert_eq!(t.tile(), IVec2::new(5, -3));
     }
 
     #[test]
     fn tile_index_insert_and_get() {
         let mut index = TileIndex::default();
         let mut world = World::new();
+        let layer = world.spawn(()).id();
         let a = world.spawn(()).id();
         let b = world.spawn(()).id();
-        let tile = Tile(IVec2::new(0, 0));
+        let tile = Tile::new(layer, 0, 0);
 
         index.insert_agent(a, tile);
         index.insert_agent(b, tile);
@@ -145,9 +164,10 @@ mod tests {
     fn tile_index_remove_agent() {
         let mut index = TileIndex::default();
         let mut world = World::new();
+        let layer = world.spawn(()).id();
         let a = world.spawn(()).id();
         let b = world.spawn(()).id();
-        let tile = Tile(IVec2::new(0, 0));
+        let tile = Tile::new(layer, 0, 0);
 
         index.insert_agent(a, tile);
         index.insert_agent(b, tile);
@@ -162,34 +182,37 @@ mod tests {
     fn tile_index_remove_clears_bucket() {
         let mut index = TileIndex::default();
         let mut world = World::new();
+        let layer = world.spawn(()).id();
         let a = world.spawn(()).id();
-        let t0 = Tile(IVec2::new(0, 0));
+        let tile = Tile::new(layer, 0, 0);
 
-        index.insert_agent(a, t0);
+        index.insert_agent(a, tile);
 
-        index.remove_agent(a, t0);
-        assert!(index.index.get(&t0).is_none());
+        index.remove_agent(a, tile);
+        assert!(index.index.get(&tile).is_none());
     }
 
     #[test]
     fn tile_index_remove_not_found() {
         let mut index = TileIndex::default();
         let mut world = World::new();
+        let layer = world.spawn(()).id();
         let a = world.spawn(()).id();
-        let t0 = Tile(IVec2::new(0, 0));
+        let tile = Tile::new(layer, 0, 0);
 
-        index.remove_agent(a, t0);
+        index.remove_agent(a, tile);
     }
 
     #[test]
     fn tile_index_get_neighbour() {
         let mut index = TileIndex::default();
         let mut world = World::new();
+        let layer = world.spawn(()).id();
         let a = world.spawn(()).id();
         let b = world.spawn(()).id();
-        let centre = Tile(IVec2::new(5, 5));
-        let neighbour = Tile(IVec2::new(6, 4));
-        let far = Tile(IVec2::new(3, 3)); // not within 1 tile
+        let centre = Tile::new(layer, 5, 5);
+        let neighbour = Tile::new(layer, 6, 4);
+        let far = Tile::new(layer, 3, 3);
 
         index.insert_agent(a, neighbour);
         index.insert_agent(b, far);
@@ -197,5 +220,28 @@ mod tests {
         let agents = index.get_agents(centre);
         assert!(agents.contains(&a));
         assert!(!agents.contains(&b));
+    }
+
+    #[test]
+    fn tile_index_layer_isolation() {
+        let mut index = TileIndex::default();
+        let mut world = World::new();
+        let layer1 = world.spawn(()).id();
+        let layer2 = world.spawn(()).id();
+        let a = world.spawn(()).id();
+        let b = world.spawn(()).id();
+        let tile1 = Tile::new(layer1, 0, 0);
+        let tile2 = Tile::new(layer2, 0, 0);
+
+        index.insert_agent(a, tile1);
+        index.insert_agent(b, tile2);
+
+        let agents1 = index.get_agents(tile1);
+        assert!(agents1.contains(&a));
+        assert!(!agents1.contains(&b));
+
+        let agents2 = index.get_agents(tile2);
+        assert!(agents2.contains(&b));
+        assert!(!agents2.contains(&a));
     }
 }

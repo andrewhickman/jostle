@@ -1,78 +1,57 @@
 use bevy::{math::FloatOrd, prelude::*};
 
-use crate::{
-    Agent, InLayer, Velocity,
-    position::Position,
-    tile::{TileChanged, TileIndex},
-};
+use crate::{Agent, Velocity, agent::AgentState, tile::TileIndex};
 
-pub(crate) fn update_index(
-    mut indices: Query<&mut TileIndex>,
-    mut tile_reader: MessageReader<TileChanged>,
-) {
-    for event in tile_reader.read() {
-        if let Some(old) = event.old {
-            if let Ok(mut index) = indices.get_mut(old.layer) {
-                index.remove_agent(event.agent, old.tile);
-            }
-        }
-
-        if let Some(new) = event.new {
-            if let Ok(mut index) = indices.get_mut(new.layer) {
-                index.insert_agent(event.agent, new.tile);
-            }
-        }
-    }
-}
-
-pub(crate) fn resolve_contacts(
-    indices: Query<&TileIndex>,
-    mut agents: Query<(Entity, &mut Transform, &Position, &mut Velocity, &InLayer), With<Agent>>,
-    targets: Query<&Position, With<Agent>>,
+pub(crate) fn process(
+    index: Res<TileIndex>,
+    mut agents: Query<(Entity, &Agent, &mut Transform, &AgentState, &mut Velocity)>,
+    targets: Query<(&Agent, &AgentState)>,
     time: Res<Time>,
 ) {
     agents
         .par_iter_mut()
-        .for_each(|(id, mut transform, position, mut velocity, layer_id)| {
+        .for_each(|(id, agent, mut transform, position, mut velocity)| {
             if velocity.0 == Vec2::ZERO {
                 return;
             }
 
-            if let Ok(index) = indices.get(layer_id.0) {
-                if let Some((nearest, t)) = index
-                    .get_agents(position.tile())
-                    .iter()
-                    .filter(|&&target| target != id)
-                    .filter_map(|&target| {
-                        let target = targets.get(target).ok()?;
-                        match solve_collision(
-                            target.position - position.position,
-                            target.velocity - position.velocity,
-                            position.radius + target.radius,
-                        ) {
-                            Some(t) if t < time.delta_secs() => Some((target, t)),
-                            _ => None,
-                        }
-                    })
-                    .min_by_key(|&(_, t)| FloatOrd(t))
-                {
-                    let t = t.max(0.);
-                    let agent_contact = position.position + position.velocity * t;
-                    let target_contact = nearest.position + nearest.velocity * t;
-                    if let Some(normal) = (agent_contact - target_contact).try_normalize() {
-                        let v_comp = position.velocity.dot(normal);
-                        if v_comp < 0.0 {
-                            velocity.0 -= v_comp * normal;
-                        }
-                    }
+            let Some(tile) = position.tile else {
+                return;
+            };
 
-                    transform.translation.x = agent_contact.x;
-                    transform.translation.y = agent_contact.y;
-                } else {
-                    let new_position = position.position + position.velocity * time.delta_secs();
-                    transform.translation.x = new_position.x;
-                    transform.translation.y = new_position.y;
+            if let Some((nearest, t)) = index
+                .get_agents(tile)
+                .iter()
+                .filter(|&&target| target != id)
+                .filter_map(|&target| {
+                    let (target_agent, target_position) = targets.get(target).ok()?;
+                    match solve_collision(
+                        target_position.position - position.position,
+                        target_position.velocity - position.velocity,
+                        agent.radius() + target_agent.radius(),
+                    ) {
+                        Some(t) if t < time.delta_secs() => Some((target_position, t)),
+                        _ => None,
+                    }
+                })
+                .min_by_key(|&(_, t)| FloatOrd(t))
+            {
+                let t = t.max(0.);
+                let agent_contact = position.position + position.velocity * t;
+                let target_contact = nearest.position + nearest.velocity * t;
+                if let Some(normal) = (agent_contact - target_contact).try_normalize() {
+                    let v_comp = position.velocity.dot(normal);
+                    if v_comp < 0.0 {
+                        velocity.0 -= v_comp * normal;
+                    }
                 }
+
+                transform.translation.x = agent_contact.x;
+                transform.translation.y = agent_contact.y;
+            } else {
+                let new_position = position.position + position.velocity * time.delta_secs();
+                transform.translation.x = new_position.x;
+                transform.translation.y = new_position.y;
             }
         });
 }
