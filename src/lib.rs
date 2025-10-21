@@ -11,7 +11,7 @@ mod tile;
 
 use bevy::prelude::*;
 
-use crate::tile::TileChanged;
+use crate::tile::{TileChanged, TileIndex};
 
 pub use self::agent::{Agent, Velocity};
 pub use self::layer::Layer;
@@ -40,7 +40,8 @@ macro_rules! measure {
 
 impl Plugin for JostlePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<TileChanged>();
+        app.init_resource::<TileIndex>()
+            .add_message::<TileChanged>();
 
         app.add_systems(
             FixedFirst,

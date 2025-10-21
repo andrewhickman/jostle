@@ -8,7 +8,7 @@ use bevy::{
 use crate::{
     Layer,
     lerp::InterpolationState,
-    tile::{LayerTile, TileChanged},
+    tile::{Tile, TileChanged},
 };
 
 /// Marker component for moving agents in the simulation.
@@ -27,7 +27,7 @@ pub struct Velocity(pub Vec2);
 pub(crate) struct AgentState {
     pub(crate) position: Vec2,
     pub(crate) velocity: Vec2,
-    pub(crate) tile: Option<LayerTile>,
+    pub(crate) tile: Option<Tile>,
 }
 
 pub(crate) fn update_tile(
@@ -54,11 +54,11 @@ pub(crate) fn update_tile(
 
             let tile = parent.and_then(|parent| {
                 let layer = layers.get(parent.get()).ok()?;
-                let tile = layer.tile(position.position);
-                Some(LayerTile {
-                    layer: parent.get(),
-                    tile,
-                })
+                Some(Tile::floor(
+                    parent.get(),
+                    position.position,
+                    layer.tile_size(),
+                ))
             });
 
             if position.tile != tile {

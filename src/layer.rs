@@ -1,10 +1,8 @@
 use bevy::prelude::*;
 
-use crate::tile::{Tile, TileIndex};
-
 /// A self-contained instance of the physics simulation.
 #[derive(Component, Debug)]
-#[require(Transform, TileIndex)]
+#[require(Transform)]
 pub struct Layer {
     tile_size: f32,
 }
@@ -20,10 +18,6 @@ impl Layer {
     /// Returns the tile size of this [`Layer`].
     pub fn tile_size(&self) -> f32 {
         self.tile_size
-    }
-
-    pub(crate) fn tile(&self, relative_position: Vec2) -> Tile {
-        Tile::floor(relative_position / self.tile_size)
     }
 }
 
