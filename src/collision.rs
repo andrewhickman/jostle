@@ -1,11 +1,11 @@
 use bevy::{math::FloatOrd, prelude::*};
 
-use crate::{Agent, Velocity, agent::Position, tile::TileIndex};
+use crate::{Agent, Velocity, agent::AgentState, tile::TileIndex};
 
 pub(crate) fn process(
     indices: Query<&TileIndex>,
-    mut agents: Query<(Entity, &Agent, &mut Transform, &Position, &mut Velocity)>,
-    targets: Query<(&Agent, &Position)>,
+    mut agents: Query<(Entity, &Agent, &mut Transform, &AgentState, &mut Velocity)>,
+    targets: Query<(&Agent, &AgentState)>,
     time: Res<Time>,
 ) {
     agents

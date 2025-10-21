@@ -13,7 +13,7 @@ use crate::{
 
 /// Marker component for moving agents in the simulation.
 #[derive(Component, Clone, Copy, Debug)]
-#[require(Transform, Position, Velocity, InterpolationState)]
+#[require(Transform, AgentState, Velocity, InterpolationState)]
 pub struct Agent {
     radius: f32,
 }
@@ -23,20 +23,20 @@ pub struct Agent {
 pub struct Velocity(pub Vec2);
 
 #[derive(Component, Clone, Copy, Debug, Default)]
-#[component(on_replace = Position::on_replace)]
-pub(crate) struct Position {
+#[component(on_replace = AgentState::on_replace)]
+pub(crate) struct AgentState {
     pub(crate) position: Vec2,
     pub(crate) velocity: Vec2,
     pub(crate) tile: Option<LayerTile>,
 }
 
-pub(crate) fn update_position(
+pub(crate) fn update_tile(
     layers: Query<&Layer>,
     mut agents: Query<
         (
             Entity,
             &Transform,
-            &mut Position,
+            &mut AgentState,
             &Velocity,
             Option<&ChildOf>,
         ),
@@ -84,9 +84,9 @@ impl Agent {
     }
 }
 
-impl Position {
+impl AgentState {
     fn on_replace(mut world: DeferredWorld, context: HookContext) {
-        let position = world.entity(context.entity).get::<Position>().unwrap();
+        let position = world.entity(context.entity).get::<AgentState>().unwrap();
         if let Some(tile) = position.tile {
             world.write_message(TileChanged {
                 agent: context.entity,

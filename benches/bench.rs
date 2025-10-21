@@ -24,7 +24,7 @@ pub fn update_physical_position(c: &mut Criterion) {
 }
 
 pub fn update_relative_position(c: &mut Criterion) {
-    bench_diagnostic(c, &jostle::diagnostic::UPDATE_AGENT_POSITION);
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_AGENT_TILE);
 }
 
 pub fn update_tile_index(c: &mut Criterion) {

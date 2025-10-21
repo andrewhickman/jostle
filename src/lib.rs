@@ -50,7 +50,7 @@ impl Plugin for JostlePlugin {
         app.add_systems(
             FixedPostUpdate,
             (
-                measure!(diagnostic::UPDATE_AGENT_POSITION, agent::update_position),
+                measure!(diagnostic::UPDATE_AGENT_TILE, agent::update_tile),
                 measure!(diagnostic::UPDATE_TILE_INDEX, tile::update_index),
                 measure!(diagnostic::PROCESS_COLLISIONS, collision::process),
             )

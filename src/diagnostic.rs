@@ -9,8 +9,7 @@ use bevy::{
 
 pub const UPDATE_FIXED_POSITION: DiagnosticPath =
     DiagnosticPath::const_new("jostle/update_fixed_position");
-pub const UPDATE_AGENT_POSITION: DiagnosticPath =
-    DiagnosticPath::const_new("jostle/update_agent_position");
+pub const UPDATE_AGENT_TILE: DiagnosticPath = DiagnosticPath::const_new("jostle/update_agent_tile");
 pub const UPDATE_RENDER_POSITION: DiagnosticPath =
     DiagnosticPath::const_new("jostle/update_render_position");
 pub const UPDATE_TILE_INDEX: DiagnosticPath = DiagnosticPath::const_new("jostle/update_tile_index");
@@ -20,7 +19,7 @@ pub const PROCESS_COLLISIONS: DiagnosticPath =
 pub(crate) fn register(app: &mut App) {
     for path in [
         UPDATE_FIXED_POSITION,
-        UPDATE_AGENT_POSITION,
+        UPDATE_AGENT_TILE,
         UPDATE_RENDER_POSITION,
         UPDATE_TILE_INDEX,
         PROCESS_COLLISIONS,
