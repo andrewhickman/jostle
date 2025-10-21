@@ -6,7 +6,7 @@ use bevy::{
     time::{TimePlugin, TimeUpdateStrategy},
 };
 use criterion::{Criterion, criterion_group, criterion_main};
-use jostle::{Agent, InLayer, JostlePlugin, Layer, Velocity};
+use jostle::{Agent, JostlePlugin, Layer, Velocity};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
 criterion_group!(
@@ -20,11 +20,11 @@ criterion_group!(
 criterion_main!(benches);
 
 pub fn update_physical_position(c: &mut Criterion) {
-    bench_diagnostic(c, &jostle::diagnostic::UPDATE_PHYSICAL_POSITION);
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_FIXED_POSITION);
 }
 
 pub fn update_relative_position(c: &mut Criterion) {
-    bench_diagnostic(c, &jostle::diagnostic::UPDATE_RELATIVE_POSITION);
+    bench_diagnostic(c, &jostle::diagnostic::UPDATE_AGENT_POSITION);
 }
 
 pub fn update_tile_index(c: &mut Criterion) {
@@ -93,7 +93,7 @@ fn startup(mut commands: Commands) {
                     rng.random_range(-1.0..1.0),
                     rng.random_range(-1.0..1.0),
                 )),
-                InLayer(layer_id),
+                ChildOf(layer_id),
             )
         })
         .collect();

@@ -6,7 +6,7 @@ pub mod diagnostic;
 mod agent;
 mod collision;
 mod layer;
-mod position;
+mod lerp;
 mod tile;
 
 use bevy::prelude::*;
@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use crate::tile::TileChanged;
 
 pub use self::agent::{Agent, Velocity};
-pub use self::layer::{InLayer, Layer, LayerAgents};
+pub use self::layer::Layer;
 
 /// Plugin for adding [`jostle`](crate) functionality to an app.
 #[derive(Debug, Default)]
@@ -44,19 +44,13 @@ impl Plugin for JostlePlugin {
 
         app.add_systems(
             FixedFirst,
-            measure!(
-                diagnostic::UPDATE_PHYSICAL_POSITION,
-                position::update_physical
-            ),
+            measure!(diagnostic::UPDATE_FIXED_POSITION, lerp::update_fixed),
         );
 
         app.add_systems(
             FixedPostUpdate,
             (
-                measure!(
-                    diagnostic::UPDATE_RELATIVE_POSITION,
-                    position::update_relative
-                ),
+                measure!(diagnostic::UPDATE_AGENT_POSITION, agent::update_position),
                 measure!(diagnostic::UPDATE_TILE_INDEX, tile::update_index),
                 measure!(diagnostic::PROCESS_COLLISIONS, collision::process),
             )
@@ -66,7 +60,7 @@ impl Plugin for JostlePlugin {
 
         app.add_systems(
             RunFixedMainLoop,
-            (measure!(diagnostic::UPDATE_RENDER_POSITION, position::update_render))
+            (measure!(diagnostic::UPDATE_RENDER_POSITION, lerp::update_render))
                 .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
         );
 

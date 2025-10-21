@@ -7,10 +7,10 @@ use bevy::{
     prelude::*,
 };
 
-pub const UPDATE_PHYSICAL_POSITION: DiagnosticPath =
-    DiagnosticPath::const_new("jostle/update_physical_position");
-pub const UPDATE_RELATIVE_POSITION: DiagnosticPath =
-    DiagnosticPath::const_new("jostle/update_relative_position");
+pub const UPDATE_FIXED_POSITION: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_fixed_position");
+pub const UPDATE_AGENT_POSITION: DiagnosticPath =
+    DiagnosticPath::const_new("jostle/update_agent_position");
 pub const UPDATE_RENDER_POSITION: DiagnosticPath =
     DiagnosticPath::const_new("jostle/update_render_position");
 pub const UPDATE_TILE_INDEX: DiagnosticPath = DiagnosticPath::const_new("jostle/update_tile_index");
@@ -19,8 +19,8 @@ pub const PROCESS_COLLISIONS: DiagnosticPath =
 
 pub(crate) fn register(app: &mut App) {
     for path in [
-        UPDATE_PHYSICAL_POSITION,
-        UPDATE_RELATIVE_POSITION,
+        UPDATE_FIXED_POSITION,
+        UPDATE_AGENT_POSITION,
         UPDATE_RENDER_POSITION,
         UPDATE_TILE_INDEX,
         PROCESS_COLLISIONS,

@@ -2,7 +2,7 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
 };
-use jostle::{Agent, InLayer, JostlePlugin, Layer, Velocity};
+use jostle::{Agent, JostlePlugin, Layer, Velocity};
 
 fn main() {
     App::new()
@@ -52,7 +52,7 @@ fn startup(
                 random_velocity(),
                 Mesh2d(mesh),
                 MeshMaterial2d(material.clone()),
-                InLayer(layer_id),
+                ChildOf(layer_id),
             )
         })
         .collect();

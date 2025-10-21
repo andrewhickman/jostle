@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     time::{TimePlugin, TimeUpdateStrategy},
 };
-use jostle::{Agent, InLayer, JostlePlugin, Layer, Velocity};
+use jostle::{Agent, JostlePlugin, Layer, Velocity};
 
 #[test]
 fn static_agent() {
@@ -17,7 +17,7 @@ fn static_agent() {
         .spawn((
             Agent::new(0.2),
             Transform::from_xyz(0.0, 0.5, 0.0),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
 
@@ -38,7 +38,7 @@ fn moving_agent() {
             Agent::new(0.2),
             Transform::from_xyz(0.0, 0.0, 0.0),
             Velocity(Vec2::new(0.5, 0.0)),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
 
@@ -84,7 +84,7 @@ fn colliding_agent_direct() {
             Agent::new(0.2),
             Transform::from_xyz(0.0, 0.0, 0.0),
             Velocity(Vec2::new(0.5, 0.0)),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
     let agent2 = app
@@ -93,7 +93,7 @@ fn colliding_agent_direct() {
             Agent::new(0.2),
             Transform::from_xyz(1.0, 0.0, 0.0),
             Velocity(Vec2::new(-0.5, 0.0)),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
 
@@ -129,7 +129,7 @@ fn colliding_agent_oblique() {
             Agent::new(0.2),
             Transform::from_xyz(0.0, 0.0, 0.0),
             Velocity(Vec2::new(0.3, 0.3)),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
     let agent2 = app
@@ -138,7 +138,7 @@ fn colliding_agent_oblique() {
             Agent::new(0.2),
             Transform::from_xyz(1.0, 0.0, 0.0),
             Velocity(Vec2::new(0.0, 0.3)),
-            InLayer(layer),
+            ChildOf(layer),
         ))
         .id();
 

@@ -1,4 +1,4 @@
-use bevy::{ecs::entity::EntityHashSet, prelude::*};
+use bevy::prelude::*;
 
 use crate::tile::{Tile, TileIndex};
 
@@ -8,16 +8,6 @@ use crate::tile::{Tile, TileIndex};
 pub struct Layer {
     tile_size: f32,
 }
-
-/// A [`Relationship`](bevy::ecs::relationship::Relationship) between an [`Agent`] and its containing [`Layer`].
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[relationship(relationship_target = LayerAgents)]
-pub struct InLayer(pub Entity);
-
-/// The set of [`Agent`](crate::Agent) entities in this layer.
-#[derive(Component, Default, Debug)]
-#[relationship_target(relationship = InLayer)]
-pub struct LayerAgents(EntityHashSet);
 
 impl Layer {
     /// Creates a new [`Layer`] with the given tile size.

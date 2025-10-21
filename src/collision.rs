@@ -1,33 +1,37 @@
 use bevy::{math::FloatOrd, prelude::*};
 
-use crate::{Agent, InLayer, Velocity, position::Position, tile::TileIndex};
+use crate::{Agent, Velocity, agent::Position, tile::TileIndex};
 
 pub(crate) fn process(
     indices: Query<&TileIndex>,
-    mut agents: Query<(Entity, &mut Transform, &Position, &mut Velocity, &InLayer), With<Agent>>,
-    targets: Query<&Position, With<Agent>>,
+    mut agents: Query<(Entity, &Agent, &mut Transform, &Position, &mut Velocity)>,
+    targets: Query<(&Agent, &Position)>,
     time: Res<Time>,
 ) {
     agents
         .par_iter_mut()
-        .for_each(|(id, mut transform, position, mut velocity, layer_id)| {
+        .for_each(|(id, agent, mut transform, position, mut velocity)| {
             if velocity.0 == Vec2::ZERO {
                 return;
             }
 
-            if let Ok(index) = indices.get(layer_id.0) {
+            let Some(tile) = position.tile else {
+                return;
+            };
+
+            if let Ok(index) = indices.get(tile.layer) {
                 if let Some((nearest, t)) = index
-                    .get_agents(position.tile())
+                    .get_agents(tile.tile)
                     .iter()
                     .filter(|&&target| target != id)
                     .filter_map(|&target| {
-                        let target = targets.get(target).ok()?;
+                        let (target_agent, target_position) = targets.get(target).ok()?;
                         match solve_collision(
-                            target.position - position.position,
-                            target.velocity - position.velocity,
-                            position.radius + target.radius,
+                            target_position.position - position.position,
+                            target_position.velocity - position.velocity,
+                            agent.radius() + target_agent.radius(),
                         ) {
-                            Some(t) if t < time.delta_secs() => Some((target, t)),
+                            Some(t) if t < time.delta_secs() => Some((target_position, t)),
                             _ => None,
                         }
                     })
