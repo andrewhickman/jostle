@@ -20,7 +20,7 @@ pub(crate) fn process(
             };
 
             if let Some((nearest, t)) = index
-                .get_agents(tile)
+                .get(tile)
                 .iter()
                 .filter(|&&target| target != id)
                 .filter_map(|&target| {

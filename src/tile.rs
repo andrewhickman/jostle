@@ -24,13 +24,7 @@ pub(crate) fn update_index(
     mut tile_reader: MessageReader<TileChanged>,
 ) {
     for event in tile_reader.read() {
-        if let Some(old) = event.old {
-            index.remove_agent(event.agent, old);
-        }
-
-        if let Some(new) = event.new {
-            index.insert_agent(event.agent, new);
-        }
+        index.update(event);
     }
 }
 
@@ -50,50 +44,94 @@ impl Tile {
     pub(crate) fn tile(&self) -> IVec2 {
         self.1
     }
-
-    pub(crate) fn neighbourhood(&self) -> [Tile; 9] {
-        let layer = self.layer();
-        let IVec2 { x, y } = self.tile();
-
-        [
-            Tile::new(layer, x - 1, y - 1),
-            Tile::new(layer, x, y - 1),
-            Tile::new(layer, x + 1, y - 1),
-            Tile::new(layer, x - 1, y),
-            Tile::new(layer, x, y),
-            Tile::new(layer, x + 1, y),
-            Tile::new(layer, x - 1, y + 1),
-            Tile::new(layer, x, y + 1),
-            Tile::new(layer, x + 1, y + 1),
-        ]
-    }
 }
 
 impl TileIndex {
-    fn insert_agent(&mut self, id: Entity, center: Tile) {
-        for tile in center.neighbourhood() {
-            self.index.entry(tile).or_default().push(id);
-        }
-    }
-
-    fn remove_agent(&mut self, id: Entity, center: Tile) {
-        for tile in center.neighbourhood() {
-            match self.index.entry(tile) {
-                hash_map::Entry::Vacant(_) => {}
-                hash_map::Entry::Occupied(mut entry) => {
-                    let agents = entry.get_mut();
-                    if let Some(pos) = agents.iter().position(|&a| a == id) {
-                        agents.swap_remove(pos);
+    fn update(&mut self, event: &TileChanged) {
+        match (event.old, event.new) {
+            (None, None) => {}
+            (Some(old), None) => self.remove_neighbourhood(event.agent, old),
+            (None, Some(new)) => self.insert_neighbourhood(event.agent, new),
+            (Some(old), Some(new)) if old.layer() != new.layer() => {
+                self.remove_neighbourhood(event.agent, old);
+                self.insert_neighbourhood(event.agent, new);
+            }
+            (Some(old), Some(new)) => {
+                let layer = old.layer();
+                let IVec2 { x: ox, y: oy } = old.tile();
+                let IVec2 { x: nx, y: ny } = new.tile();
+                let (dx, dy) = (nx - ox, ny - oy);
+                match (dx, dy) {
+                    (0, 0) => {}
+                    (1 | -1, 0) | (0, 1 | -1) => {
+                        self.remove(event.agent, Tile::new(layer, ox - dx + dy, oy - dy + dx));
+                        self.remove(event.agent, Tile::new(layer, ox - dx, oy - dy));
+                        self.remove(event.agent, Tile::new(layer, ox - dx - dy, oy - dy - dx));
+                        self.insert(event.agent, Tile::new(layer, nx + dx + dy, ny + dy + dx));
+                        self.insert(event.agent, Tile::new(layer, nx + dx, ny + dy));
+                        self.insert(event.agent, Tile::new(layer, nx + dx - dy, ny + dy - dx));
                     }
-                    if agents.is_empty() {
-                        entry.remove();
+                    (1 | -1, 1 | -1) => {
+                        self.remove(event.agent, Tile::new(layer, ox + dx, oy - dy));
+                        self.remove(event.agent, Tile::new(layer, ox, oy - dy));
+                        self.remove(event.agent, Tile::new(layer, ox - dx, oy - dy));
+                        self.remove(event.agent, Tile::new(layer, ox - dx, oy));
+                        self.remove(event.agent, Tile::new(layer, ox - dx, oy + dy));
+                        self.insert(event.agent, Tile::new(layer, nx - dx, ny + dy));
+                        self.insert(event.agent, Tile::new(layer, nx, ny + dy));
+                        self.insert(event.agent, Tile::new(layer, nx + dx, ny + dy));
+                        self.insert(event.agent, Tile::new(layer, nx + dx, ny));
+                        self.insert(event.agent, Tile::new(layer, nx + dx, ny - dy));
+                    }
+                    _ => {
+                        self.remove_neighbourhood(event.agent, old);
+                        self.insert_neighbourhood(event.agent, new);
                     }
                 }
             }
         }
     }
 
-    pub(crate) fn get_agents(&self, tile: Tile) -> &[Entity] {
+    fn insert_neighbourhood(&mut self, agent: Entity, tile: Tile) {
+        let layer = tile.layer();
+        let IVec2 { x, y } = tile.tile();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                self.insert(agent, Tile::new(layer, x + dx, y + dy));
+            }
+        }
+    }
+
+    fn remove_neighbourhood(&mut self, agent: Entity, tile: Tile) {
+        let layer = tile.layer();
+        let IVec2 { x, y } = tile.tile();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                self.remove(agent, Tile::new(layer, x + dx, y + dy));
+            }
+        }
+    }
+
+    fn insert(&mut self, id: Entity, tile: Tile) {
+        self.index.entry(tile).or_default().push(id);
+    }
+
+    fn remove(&mut self, id: Entity, tile: Tile) {
+        match self.index.entry(tile) {
+            hash_map::Entry::Vacant(_) => {}
+            hash_map::Entry::Occupied(mut entry) => {
+                let agents = entry.get_mut();
+                if let Some(pos) = agents.iter().position(|&a| a == id) {
+                    agents.swap_remove(pos);
+                }
+                if agents.is_empty() {
+                    entry.remove();
+                }
+            }
+        }
+    }
+
+    pub(crate) fn get(&self, tile: Tile) -> &[Entity] {
         match self.index.get(&tile) {
             Some(agents) => agents,
             None => &[],
@@ -152,10 +190,10 @@ mod tests {
         let b = world.spawn(()).id();
         let tile = Tile::new(layer, 0, 0);
 
-        index.insert_agent(a, tile);
-        index.insert_agent(b, tile);
+        index.insert_neighbourhood(a, tile);
+        index.insert_neighbourhood(b, tile);
 
-        let agents = index.get_agents(tile);
+        let agents = index.get(tile);
         assert!(agents.contains(&a));
         assert!(agents.contains(&b));
     }
@@ -169,11 +207,11 @@ mod tests {
         let b = world.spawn(()).id();
         let tile = Tile::new(layer, 0, 0);
 
-        index.insert_agent(a, tile);
-        index.insert_agent(b, tile);
+        index.insert_neighbourhood(a, tile);
+        index.insert_neighbourhood(b, tile);
 
-        index.remove_agent(b, tile);
-        let agents = index.get_agents(tile);
+        index.remove_neighbourhood(b, tile);
+        let agents = index.get(tile);
         assert!(!agents.contains(&b));
         assert!(agents.contains(&a));
     }
@@ -186,9 +224,9 @@ mod tests {
         let a = world.spawn(()).id();
         let tile = Tile::new(layer, 0, 0);
 
-        index.insert_agent(a, tile);
+        index.insert_neighbourhood(a, tile);
 
-        index.remove_agent(a, tile);
+        index.remove_neighbourhood(a, tile);
         assert!(index.index.get(&tile).is_none());
     }
 
@@ -200,7 +238,7 @@ mod tests {
         let a = world.spawn(()).id();
         let tile = Tile::new(layer, 0, 0);
 
-        index.remove_agent(a, tile);
+        index.remove_neighbourhood(a, tile);
     }
 
     #[test]
@@ -214,10 +252,10 @@ mod tests {
         let neighbour = Tile::new(layer, 6, 4);
         let far = Tile::new(layer, 3, 3);
 
-        index.insert_agent(a, neighbour);
-        index.insert_agent(b, far);
+        index.insert_neighbourhood(a, neighbour);
+        index.insert_neighbourhood(b, far);
 
-        let agents = index.get_agents(centre);
+        let agents = index.get(centre);
         assert!(agents.contains(&a));
         assert!(!agents.contains(&b));
     }
@@ -233,14 +271,14 @@ mod tests {
         let tile1 = Tile::new(layer1, 0, 0);
         let tile2 = Tile::new(layer2, 0, 0);
 
-        index.insert_agent(a, tile1);
-        index.insert_agent(b, tile2);
+        index.insert_neighbourhood(a, tile1);
+        index.insert_neighbourhood(b, tile2);
 
-        let agents1 = index.get_agents(tile1);
+        let agents1 = index.get(tile1);
         assert!(agents1.contains(&a));
         assert!(!agents1.contains(&b));
 
-        let agents2 = index.get_agents(tile2);
+        let agents2 = index.get(tile2);
         assert!(agents2.contains(&b));
         assert!(!agents2.contains(&a));
     }

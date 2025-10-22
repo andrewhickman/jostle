@@ -137,7 +137,7 @@ mod tests {
                 new: Some(Tile::new(layer, 1, 2)),
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[agent]);
     }
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(state.velocity, Vec2::ZERO);
         assert_eq!(state.tile, Some(Tile::new(layer, 1, 2)));
         assert_eq!(changes, vec![]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[agent]);
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(state.velocity, Vec2::ZERO);
         assert_eq!(state.tile, Some(Tile::new(layer, 1, 2)));
         assert_eq!(changes, vec![]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[agent]);
     }
 
     #[test]
@@ -220,20 +220,20 @@ mod tests {
                 new: Some(Tile::new(layer, 2, 1)),
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer, 0, 1)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer, 0, 2)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer, 0, 3)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 3)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer, 2, 3)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 0)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 2, 0)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 3, 0)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 1)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 2, 1)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 3, 1)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 2, 2)), &[agent]);
-        assert_eq!(index.get_agents(Tile::new(layer, 3, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 0, 1)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 0, 2)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 0, 3)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 1, 3)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 2, 3)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 1, 0)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 2, 0)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 3, 0)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 1, 1)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 2, 1)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 3, 1)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 2, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer, 3, 2)), &[agent]);
     }
 
     #[test]
@@ -267,8 +267,8 @@ mod tests {
                 new: Some(Tile::new(layer2, 1, 2)),
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer1, 1, 2)), &[]);
-        assert_eq!(index.get_agents(Tile::new(layer2, 1, 2)), &[agent]);
+        assert_eq!(index.get(Tile::new(layer1, 1, 2)), &[]);
+        assert_eq!(index.get(Tile::new(layer2, 1, 2)), &[agent]);
     }
 
     #[test]
@@ -301,7 +301,7 @@ mod tests {
                 new: None,
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[]);
     }
 
     #[test]
@@ -331,7 +331,7 @@ mod tests {
                 new: None,
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[]);
     }
 
     #[test]
@@ -361,7 +361,7 @@ mod tests {
                 new: None,
             }]
         );
-        assert_eq!(index.get_agents(Tile::new(layer, 1, 2)), &[]);
+        assert_eq!(index.get(Tile::new(layer, 1, 2)), &[]);
     }
 
     fn make_app() -> App {
