@@ -41,8 +41,29 @@ impl Tile {
         self.0
     }
 
-    pub(crate) fn tile(&self) -> IVec2 {
-        self.1
+    pub(crate) fn x(&self) -> i32 {
+        self.1.x
+    }
+
+    pub(crate) fn y(&self) -> i32 {
+        self.1.y
+    }
+
+    pub(crate) fn neighborhood(&self) -> [Tile; 9] {
+        let layer = self.layer();
+        let (x, y) = (self.x(), self.y());
+
+        [
+            Tile::new(layer, x - 1, y - 1),
+            Tile::new(layer, x, y - 1),
+            Tile::new(layer, x + 1, y - 1),
+            Tile::new(layer, x - 1, y),
+            Tile::new(layer, x, y),
+            Tile::new(layer, x + 1, y),
+            Tile::new(layer, x - 1, y + 1),
+            Tile::new(layer, x, y + 1),
+            Tile::new(layer, x + 1, y + 1),
+        ]
     }
 }
 
@@ -50,16 +71,16 @@ impl TileIndex {
     fn update(&mut self, event: &TileChanged) {
         match (event.old, event.new) {
             (None, None) => {}
-            (Some(old), None) => self.remove_neighbourhood(event.agent, old),
-            (None, Some(new)) => self.insert_neighbourhood(event.agent, new),
+            (Some(old), None) => self.remove_neighborhood(event.agent, old),
+            (None, Some(new)) => self.insert_neighborhood(event.agent, new),
             (Some(old), Some(new)) if old.layer() != new.layer() => {
-                self.remove_neighbourhood(event.agent, old);
-                self.insert_neighbourhood(event.agent, new);
+                self.remove_neighborhood(event.agent, old);
+                self.insert_neighborhood(event.agent, new);
             }
             (Some(old), Some(new)) => {
                 let layer = old.layer();
-                let IVec2 { x: ox, y: oy } = old.tile();
-                let IVec2 { x: nx, y: ny } = new.tile();
+                let (ox, oy) = (old.x(), old.y());
+                let (nx, ny) = (new.x(), new.y());
                 let (dx, dy) = (nx - ox, ny - oy);
                 match (dx, dy) {
                     (0, 0) => {}
@@ -84,31 +105,23 @@ impl TileIndex {
                         self.insert(event.agent, Tile::new(layer, nx + dx, ny - dy));
                     }
                     _ => {
-                        self.remove_neighbourhood(event.agent, old);
-                        self.insert_neighbourhood(event.agent, new);
+                        self.remove_neighborhood(event.agent, old);
+                        self.insert_neighborhood(event.agent, new);
                     }
                 }
             }
         }
     }
 
-    fn insert_neighbourhood(&mut self, agent: Entity, tile: Tile) {
-        let layer = tile.layer();
-        let IVec2 { x, y } = tile.tile();
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                self.insert(agent, Tile::new(layer, x + dx, y + dy));
-            }
+    fn insert_neighborhood(&mut self, agent: Entity, tile: Tile) {
+        for t in tile.neighborhood() {
+            self.insert(agent, t);
         }
     }
 
-    fn remove_neighbourhood(&mut self, agent: Entity, tile: Tile) {
-        let layer = tile.layer();
-        let IVec2 { x, y } = tile.tile();
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                self.remove(agent, Tile::new(layer, x + dx, y + dy));
-            }
+    fn remove_neighborhood(&mut self, agent: Entity, tile: Tile) {
+        for t in tile.neighborhood() {
+            self.remove(agent, t);
         }
     }
 
@@ -146,140 +159,243 @@ mod tests {
     use super::*;
 
     #[test]
-    fn constructor() {
+    fn floor() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(1.2, -3.7), 1.0);
-        assert_eq!(tile.tile(), IVec2::new(1, -4));
+        assert_eq!(tile.x(), 1);
+        assert_eq!(tile.y(), -4);
     }
 
     #[test]
-    fn constructor_zero() {
-        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::ZERO, 1.0);
-        assert_eq!(t.tile(), IVec2::new(0, 0));
+    fn floor_zero() {
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::ZERO, 1.0);
+        assert_eq!(tile.x(), 0);
+        assert_eq!(tile.y(), 0);
     }
 
     #[test]
-    fn constructor_positive_fractional() {
-        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(0.9999, 0.0001), 1.0);
-        assert_eq!(t.tile(), IVec2::new(0, 0));
+    fn floor_fractional() {
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(0.9999, 0.0001), 1.0);
+        assert_eq!(tile.x(), 0);
+        assert_eq!(tile.y(), 0);
     }
 
     #[test]
-    fn constructor_exact_integers() {
-        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.0, -3.0), 1.0);
-        assert_eq!(t.tile(), IVec2::new(2, -3));
+    fn floor_integer() {
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.0, -3.0), 1.0);
+        assert_eq!(tile.x(), 2);
+        assert_eq!(tile.y(), -3);
     }
 
     #[test]
-    fn constructor_negative_fractional() {
-        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(-0.0001, -0.9999), 1.0);
-        assert_eq!(t.tile(), IVec2::new(-1, -1));
+    fn floor_negative_fractional() {
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(-0.0001, -0.9999), 1.0);
+        assert_eq!(tile.x(), -1);
+        assert_eq!(tile.y(), -1);
     }
 
     #[test]
-    fn constructor_custom_tile_size() {
-        let t = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 0.5);
-        assert_eq!(t.tile(), IVec2::new(5, -3));
+    fn floor_custom_tile_size() {
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 0.5);
+        assert_eq!(tile.x(), 5);
+        assert_eq!(tile.y(), -3);
     }
 
     #[test]
-    fn tile_index_insert_and_get() {
-        let mut index = TileIndex::default();
+    fn update_insert_neighborhood() {
         let mut world = World::new();
         let layer = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let b = world.spawn(()).id();
-        let tile = Tile::new(layer, 0, 0);
+        let agent = world.spawn(()).id();
 
-        index.insert_neighbourhood(a, tile);
-        index.insert_neighbourhood(b, tile);
+        let mut index = TileIndex::default();
+        let center = Tile::new(layer, 0, 0);
+        index.update(&TileChanged {
+            agent,
+            old: None,
+            new: Some(center),
+        });
 
-        let agents = index.get(tile);
-        assert!(agents.contains(&a));
-        assert!(agents.contains(&b));
+        assert_neighborhood(&index, center, agent);
     }
 
     #[test]
-    fn tile_index_remove_agent() {
-        let mut index = TileIndex::default();
+    fn update_remove_neighborhood() {
         let mut world = World::new();
         let layer = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let b = world.spawn(()).id();
-        let tile = Tile::new(layer, 0, 0);
+        let agent = world.spawn(()).id();
 
-        index.insert_neighbourhood(a, tile);
-        index.insert_neighbourhood(b, tile);
+        let mut index = TileIndex::default();
+        let center = Tile::new(layer, 0, 0);
+        index.update(&TileChanged {
+            agent,
+            old: None,
+            new: Some(center),
+        });
+        index.update(&TileChanged {
+            agent,
+            old: Some(center),
+            new: None,
+        });
 
-        index.remove_neighbourhood(b, tile);
-        let agents = index.get(tile);
-        assert!(!agents.contains(&b));
-        assert!(agents.contains(&a));
+        for tile in center.neighborhood() {
+            assert!(
+                !index.get(tile).contains(&agent),
+                "expected {:?} to be cleared",
+                tile
+            );
+        }
     }
 
     #[test]
-    fn tile_index_remove_clears_bucket() {
-        let mut index = TileIndex::default();
+    fn update_same_tile() {
         let mut world = World::new();
         let layer = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let tile = Tile::new(layer, 0, 0);
+        let agent = world.spawn(()).id();
 
-        index.insert_neighbourhood(a, tile);
+        let mut index = TileIndex::default();
+        let center = Tile::new(layer, 2, -1);
+        index.update(&TileChanged {
+            agent,
+            old: None,
+            new: Some(center),
+        });
+        index.update(&TileChanged {
+            agent,
+            old: Some(center),
+            new: Some(center),
+        });
 
-        index.remove_neighbourhood(a, tile);
-        assert!(index.index.get(&tile).is_none());
+        assert_neighborhood(&index, center, agent);
     }
 
     #[test]
-    fn tile_index_remove_not_found() {
-        let mut index = TileIndex::default();
-        let mut world = World::new();
-        let layer = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let tile = Tile::new(layer, 0, 0);
-
-        index.remove_neighbourhood(a, tile);
+    fn update_move_cardinal_e() {
+        assert_move(IVec2::new(0, 0), IVec2::new(1, 0));
     }
 
     #[test]
-    fn tile_index_get_neighbour() {
-        let mut index = TileIndex::default();
-        let mut world = World::new();
-        let layer = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let b = world.spawn(()).id();
-        let centre = Tile::new(layer, 5, 5);
-        let neighbour = Tile::new(layer, 6, 4);
-        let far = Tile::new(layer, 3, 3);
-
-        index.insert_neighbourhood(a, neighbour);
-        index.insert_neighbourhood(b, far);
-
-        let agents = index.get(centre);
-        assert!(agents.contains(&a));
-        assert!(!agents.contains(&b));
+    fn update_move_cardinal_w() {
+        assert_move(IVec2::new(0, 0), IVec2::new(-1, 0));
     }
 
     #[test]
-    fn tile_index_layer_isolation() {
-        let mut index = TileIndex::default();
+    fn update_move_cardinal_n() {
+        assert_move(IVec2::new(0, 0), IVec2::new(0, 1));
+    }
+
+    #[test]
+    fn update_move_cardinal_s() {
+        assert_move(IVec2::new(0, 0), IVec2::new(0, -1));
+    }
+
+    #[test]
+    fn update_move_diagonal_ne() {
+        assert_move(IVec2::new(0, 0), IVec2::new(1, 1));
+    }
+
+    #[test]
+    fn update_move_diagonal_nw() {
+        assert_move(IVec2::new(0, 0), IVec2::new(-1, 1));
+    }
+
+    #[test]
+    fn update_move_diagonal_se() {
+        assert_move(IVec2::new(0, 0), IVec2::new(1, -1));
+    }
+
+    #[test]
+    fn update_move_diagonal_sw() {
+        assert_move(IVec2::new(0, 0), IVec2::new(-1, -1));
+    }
+
+    #[test]
+    fn update_jump_cardinal() {
+        assert_move(IVec2::new(0, 0), IVec2::new(2, 0));
+    }
+
+    #[test]
+    fn update_jump_diagonal() {
+        assert_move(IVec2::new(0, 0), IVec2::new(3, -2));
+    }
+
+    #[test]
+    fn update_change_layer() {
         let mut world = World::new();
         let layer1 = world.spawn(()).id();
         let layer2 = world.spawn(()).id();
-        let a = world.spawn(()).id();
-        let b = world.spawn(()).id();
-        let tile1 = Tile::new(layer1, 0, 0);
-        let tile2 = Tile::new(layer2, 0, 0);
+        let agent = world.spawn(()).id();
 
-        index.insert_neighbourhood(a, tile1);
-        index.insert_neighbourhood(b, tile2);
+        let mut index = TileIndex::default();
+        let old = Tile::new(layer1, 0, 0);
+        let new = Tile::new(layer2, 4, 1);
+        index.update(&TileChanged {
+            agent,
+            old: None,
+            new: Some(old),
+        });
+        index.update(&TileChanged {
+            agent,
+            old: Some(old),
+            new: Some(new),
+        });
 
-        let agents1 = index.get(tile1);
-        assert!(agents1.contains(&a));
-        assert!(!agents1.contains(&b));
+        for tile in old.neighborhood() {
+            assert!(
+                !index.get(tile).contains(&agent),
+                "expected {:?} to be cleared (layer1)",
+                tile
+            );
+        }
 
-        let agents2 = index.get(tile2);
-        assert!(agents2.contains(&b));
-        assert!(!agents2.contains(&a));
+        assert_neighborhood(&index, new, agent);
+    }
+
+    fn assert_move(old: IVec2, new: IVec2) {
+        let mut world = World::new();
+        let layer = world.spawn(()).id();
+        let agent = world.spawn(()).id();
+
+        let mut index = TileIndex::default();
+        let old = Tile(layer, old);
+        let new = Tile(layer, new);
+        index.update(&TileChanged {
+            agent,
+            old: None,
+            new: Some(old),
+        });
+        index.update(&TileChanged {
+            agent,
+            old: Some(old),
+            new: Some(new),
+        });
+
+        assert_neighborhood(&index, new, agent);
+    }
+
+    fn assert_neighborhood(index: &TileIndex, center: Tile, agent: Entity) {
+        for x in center.x() - 2..=center.x() + 2 {
+            for y in center.y() - 2..=center.y() + 2 {
+                let tile = Tile::new(center.layer(), x, y);
+                let agents = index.get(tile);
+                if tile.1.chebyshev_distance(center.1) > 1 {
+                    assert!(
+                        !agents.contains(&agent),
+                        "did not expect {:?} to contain agent",
+                        tile
+                    );
+                } else {
+                    assert!(
+                        agents.contains(&agent),
+                        "expected {:?} to contain agent",
+                        tile
+                    );
+                    assert_eq!(
+                        agents.iter().filter(|&&a| a == agent).count(),
+                        1,
+                        "agent duplicated in {:?}",
+                        tile
+                    );
+                }
+            }
+        }
     }
 }
