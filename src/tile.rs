@@ -9,10 +9,10 @@ pub(crate) struct Tile(Entity, IVec2);
 
 #[derive(Resource, Default, Debug)]
 pub(crate) struct TileIndex {
-    index: HashMap<Tile, SmallVec<[Entity; 4]>>,
+    index: HashMap<Tile, SmallVec<[Entity; 7]>>,
 }
 
-#[derive(Clone, Debug, Message)]
+#[derive(Clone, Debug, Message, PartialEq, Eq)]
 pub(crate) struct TileChanged {
     pub(crate) agent: Entity,
     pub(crate) old: Option<Tile>,

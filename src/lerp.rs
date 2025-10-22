@@ -92,7 +92,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn agent_inserted_fixed_update() {
+    fn agent_spawned_fixed_update() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(1.5, -2.0), 0.3);
 
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_inserted_render_update() {
+    fn agent_spawned_render_update() {
         let mut app = make_app();
         let agent = spawn_agent(&mut app, Vec2::new(1.5, -2.0), 0.3);
 
@@ -133,7 +133,7 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, 1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.5);
 
         run_fixed_update(&mut app);
@@ -156,7 +156,7 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(1.5, -2.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, -1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, -1.0));
         run_fixed_update(&mut app);
 
         let (new_transform, state) = get_position(&mut app, agent);
@@ -177,7 +177,7 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, 1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, 1.0));
 
         run_render_update(&mut app, 0.5);
 
@@ -199,7 +199,7 @@ mod tests {
         }
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(2.0, 2.0));
+        set_position(&mut app, agent, Vec2::new(2.0, 2.0));
 
         run_render_update(&mut app, 0.0);
 
@@ -227,7 +227,7 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, 1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, 1.0));
 
         run_render_update(&mut app, 0.3);
         run_render_update(&mut app, 0.4);
@@ -256,10 +256,10 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, 1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.5);
 
-        update_position(&mut app, agent, Vec2::new(2.0, 2.0));
+        set_position(&mut app, agent, Vec2::new(2.0, 2.0));
         run_transform_propagation(&mut app);
 
         run_fixed_update(&mut app);
@@ -282,10 +282,10 @@ mod tests {
         let agent = spawn_agent(&mut app, Vec2::new(0.0, 0.0), 0.3);
 
         run_fixed_update(&mut app);
-        update_position(&mut app, agent, Vec2::new(1.0, 1.0));
+        set_position(&mut app, agent, Vec2::new(1.0, 1.0));
         run_render_update(&mut app, 0.3);
 
-        update_position(&mut app, agent, Vec2::new(2.0, 2.0));
+        set_position(&mut app, agent, Vec2::new(2.0, 2.0));
         run_transform_propagation(&mut app);
 
         run_render_update(&mut app, 0.4);
@@ -324,10 +324,14 @@ mod tests {
     fn make_app() -> App {
         let mut app = App::new();
         app.add_plugins((TransformPlugin, TimePlugin));
+
         app.insert_resource(Time::<Fixed>::from_seconds(1.0));
 
         app.add_systems(FixedFirst, update_fixed);
         app.add_systems(Update, update_render);
+
+        app.finish();
+        app.cleanup();
 
         app
     }
@@ -361,7 +365,7 @@ mod tests {
         app.world_mut().run_schedule(PostUpdate);
     }
 
-    fn update_position(app: &mut App, id: Entity, position: Vec2) {
+    fn set_position(app: &mut App, id: Entity, position: Vec2) {
         let world = app.world_mut();
         let mut transform = world.query::<&mut Transform>().get_mut(world, id).unwrap();
         transform.translation = position.extend(0.);
