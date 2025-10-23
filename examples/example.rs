@@ -6,7 +6,7 @@ use jostle::{Agent, JostlePlugin, Layer, Velocity};
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, JostlePlugin))
+        .add_plugins((DefaultPlugins, JostlePlugin::<()>::default()))
         .add_plugins((
             FrameTimeDiagnosticsPlugin::default(),
             LogDiagnosticsPlugin::default(),

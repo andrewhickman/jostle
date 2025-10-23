@@ -9,16 +9,27 @@ mod layer;
 mod lerp;
 mod tile;
 
-use bevy::prelude::*;
+use std::marker::PhantomData;
+
+use bevy::{
+    ecs::{intern::Interned, schedule::ScheduleLabel, system::SystemParamItem},
+    prelude::*,
+};
 
 use crate::tile::{TileChanged, TileIndex};
 
-pub use self::agent::{Agent, Velocity};
-pub use self::layer::Layer;
+pub use self::{
+    agent::{Agent, Velocity},
+    layer::Layer,
+    tile::TileMap,
+};
 
 /// Plugin for adding [`jostle`](crate) functionality to an app.
-#[derive(Debug, Default)]
-pub struct JostlePlugin;
+#[derive(Debug)]
+pub struct JostlePlugin<T> {
+    schedule: Interned<dyn ScheduleLabel>,
+    marker: PhantomData<T>,
+}
 
 /// The [`SystemSet`] containing [`jostle`](crate) systems in the [`FixedPostUpdate`] schedule.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
@@ -38,7 +49,21 @@ macro_rules! measure {
     }};
 }
 
-impl Plugin for JostlePlugin {
+impl<T> JostlePlugin<T> {
+    /// Creates a new [`JostlePlugin`] plugin using the given schedule.
+    pub fn new(schedule: impl ScheduleLabel) -> Self {
+        Self {
+            schedule: schedule.intern(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T> Plugin for JostlePlugin<T>
+where
+    T: TileMap + 'static,
+    for<'w, 's> SystemParamItem<'w, 's, T>: TileMap,
+{
     fn build(&self, app: &mut App) {
         app.init_resource::<TileIndex>()
             .add_message::<TileChanged>();
@@ -49,11 +74,11 @@ impl Plugin for JostlePlugin {
         );
 
         app.add_systems(
-            FixedPostUpdate,
+            self.schedule,
             (
                 measure!(diagnostic::UPDATE_AGENT_TILE, agent::update_tile),
                 measure!(diagnostic::UPDATE_TILE_INDEX, tile::update_index),
-                measure!(diagnostic::PROCESS_COLLISIONS, collision::process),
+                measure!(diagnostic::PROCESS_COLLISIONS, collision::process::<T>),
             )
                 .chain_ignore_deferred()
                 .in_set(JostleSystems),
@@ -67,5 +92,14 @@ impl Plugin for JostlePlugin {
 
         #[cfg(feature = "diagnostic")]
         diagnostic::register(app);
+    }
+}
+
+impl<T> Default for JostlePlugin<T> {
+    fn default() -> Self {
+        Self {
+            schedule: FixedPostUpdate.intern(),
+            marker: PhantomData,
+        }
     }
 }

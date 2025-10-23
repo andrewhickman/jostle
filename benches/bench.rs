@@ -57,7 +57,7 @@ fn bench_diagnostic(c: &mut Criterion, path: &DiagnosticPath) {
 
 fn make_app() -> App {
     let mut app = App::new();
-    app.add_plugins((TransformPlugin, TimePlugin, JostlePlugin));
+    app.add_plugins((TransformPlugin, TimePlugin, JostlePlugin::<()>::default()));
     app.finish();
     app.cleanup();
 

@@ -1,8 +1,18 @@
 use bevy::{
+    ecs::system::SystemParam,
+    math::CompassQuadrant,
     platform::collections::{HashMap, hash_map},
     prelude::*,
 };
 use smallvec::SmallVec;
+
+/// A system parameter used to check whether a tile be collidable by agents.
+pub trait TileMap: SystemParam + Send + Sync {
+    /// Returns `true` if the tile at the given layer and coordinates is solid.
+    ///
+    /// A tile's coordinates are its bottom-left corner.
+    fn is_solid(&self, layer: Entity, tile: IVec2) -> bool;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Tile(Entity, IVec2);
@@ -41,12 +51,16 @@ impl Tile {
         self.0
     }
 
+    pub(crate) fn tile(&self) -> IVec2 {
+        self.1
+    }
+
     pub(crate) fn x(&self) -> i32 {
-        self.1.x
+        self.tile().x
     }
 
     pub(crate) fn y(&self) -> i32 {
-        self.1.y
+        self.tile().y
     }
 
     pub(crate) fn neighborhood(&self) -> [Tile; 9] {
@@ -64,6 +78,32 @@ impl Tile {
             Tile::new(layer, x, y + 1),
             Tile::new(layer, x + 1, y + 1),
         ]
+    }
+
+    pub(crate) fn boundaries(
+        &self,
+        map: &impl TileMap,
+    ) -> impl Iterator<Item = (i32, CompassQuadrant)> {
+        let layer = self.layer();
+        let (x, y) = (self.x(), self.y());
+
+        let solid = map.is_solid(layer, self.tile());
+
+        [
+            (IVec2::new(x, y + 1), y + 1, CompassQuadrant::North),
+            (IVec2::new(x + 1, y), x + 1, CompassQuadrant::East),
+            (IVec2::new(x, y - 1), y, CompassQuadrant::South),
+            (IVec2::new(x - 1, y), x, CompassQuadrant::West),
+        ]
+        .into_iter()
+        .filter_map(move |(adjacent, position, direction)| {
+            let adjacent_solid = map.is_solid(layer, adjacent);
+            match (solid, adjacent_solid) {
+                (false, false) | (true, true) => None,
+                (false, true) => Some((position, direction)),
+                (true, false) => Some((position, direction.opposite())),
+            }
+        })
     }
 }
 
@@ -152,6 +192,14 @@ impl TileIndex {
     }
 }
 
+/// A default implementation of [`TileMap`] that treats all tiles as non-solid.
+impl TileMap for () {
+    /// Returns `false` for all tiles.
+    fn is_solid(&self, _: Entity, _: IVec2) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::prelude::*;
@@ -161,43 +209,37 @@ mod tests {
     #[test]
     fn floor() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(1.2, -3.7), 1.0);
-        assert_eq!(tile.x(), 1);
-        assert_eq!(tile.y(), -4);
+        assert_eq!(tile.tile(), IVec2::new(1, -4));
     }
 
     #[test]
     fn floor_zero() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::ZERO, 1.0);
-        assert_eq!(tile.x(), 0);
-        assert_eq!(tile.y(), 0);
+        assert_eq!(tile.tile(), IVec2::new(0, 0));
     }
 
     #[test]
     fn floor_fractional() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(0.9999, 0.0001), 1.0);
-        assert_eq!(tile.x(), 0);
-        assert_eq!(tile.y(), 0);
+        assert_eq!(tile.tile(), IVec2::new(0, 0));
     }
 
     #[test]
     fn floor_integer() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.0, -3.0), 1.0);
-        assert_eq!(tile.x(), 2);
-        assert_eq!(tile.y(), -3);
+        assert_eq!(tile.tile(), IVec2::new(2, -3));
     }
 
     #[test]
     fn floor_negative_fractional() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(-0.0001, -0.9999), 1.0);
-        assert_eq!(tile.x(), -1);
-        assert_eq!(tile.y(), -1);
+        assert_eq!(tile.tile(), IVec2::new(-1, -1));
     }
 
     #[test]
     fn floor_custom_tile_size() {
         let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 2.0);
-        assert_eq!(tile.x(), 5);
-        assert_eq!(tile.y(), -3);
+        assert_eq!(tile.tile(), IVec2::new(5, -3));
     }
 
     #[test]
