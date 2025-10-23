@@ -54,11 +54,7 @@ pub(crate) fn update_tile(
 
             let tile = parent.and_then(|parent| {
                 let layer = layers.get(parent.get()).ok()?;
-                Some(Tile::floor(
-                    parent.get(),
-                    position.position,
-                    layer.tile_size(),
-                ))
+                Some(Tile::floor(parent.get(), position.position, layer.scale()))
             });
 
             if position.tile != tile {

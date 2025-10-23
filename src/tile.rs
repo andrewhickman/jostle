@@ -33,8 +33,8 @@ impl Tile {
         Tile(layer, IVec2::new(x, y))
     }
 
-    pub(crate) fn floor(layer: Entity, position: Vec2, tile_size: f32) -> Self {
-        Tile(layer, (position / tile_size).floor().as_ivec2())
+    pub(crate) fn floor(layer: Entity, position: Vec2, scale: f32) -> Self {
+        Tile(layer, (position * scale).floor().as_ivec2())
     }
 
     pub(crate) fn layer(&self) -> Entity {
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn floor_custom_tile_size() {
-        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 0.5);
+        let tile = Tile::floor(Entity::PLACEHOLDER, Vec2::new(2.5, -1.5), 2.0);
         assert_eq!(tile.x(), 5);
         assert_eq!(tile.y(), -3);
     }
