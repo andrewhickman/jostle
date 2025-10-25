@@ -130,8 +130,8 @@ impl Collision<'_> {
             Collision::Wall(normal) => {
                 let normal = match normal {
                     CompassQuadrant::North => Vec2::Y,
-                    CompassQuadrant::South => -Vec2::Y,
                     CompassQuadrant::East => Vec2::X,
+                    CompassQuadrant::South => -Vec2::Y,
                     CompassQuadrant::West => -Vec2::X,
                 };
 
@@ -180,18 +180,18 @@ fn solve_wall_collision(
     wall_normal: CompassQuadrant,
     tile_size: f32,
 ) -> Option<f32> {
-    let (projected_position, projected_velocity) = match wall_normal {
-        CompassQuadrant::North => (agent_position.y, agent_velocity.y),
-        CompassQuadrant::South => (-agent_position.y, -agent_velocity.y),
-        CompassQuadrant::East => (agent_position.x, agent_velocity.x),
-        CompassQuadrant::West => (-agent_position.x, -agent_velocity.x),
+    let wall_position = wall_position as f32 * tile_size;
+    let (delta_position, projected_velocity) = match wall_normal {
+        CompassQuadrant::North => (agent_position.y - wall_position, -agent_velocity.y),
+        CompassQuadrant::East => (agent_position.x - wall_position, -agent_velocity.x),
+        CompassQuadrant::South => (wall_position - agent_position.y, agent_velocity.y),
+        CompassQuadrant::West => (wall_position - agent_position.x, agent_velocity.x),
     };
-    if projected_velocity < 0.0 {
+    if projected_velocity > 0.0 {
+        Some((delta_position - agent_radius) / projected_velocity)
+    } else {
         return None;
     }
-
-    let delta_position = wall_position as f32 * tile_size - projected_position;
-    Some((delta_position - agent_radius) / projected_velocity)
 }
 
 #[cfg(test)]

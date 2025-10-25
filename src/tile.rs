@@ -90,10 +90,10 @@ impl Tile {
         let solid = map.is_solid(layer, self.tile());
 
         [
-            (IVec2::new(x, y + 1), y + 1, CompassQuadrant::North),
-            (IVec2::new(x + 1, y), x + 1, CompassQuadrant::East),
-            (IVec2::new(x, y - 1), y, CompassQuadrant::South),
-            (IVec2::new(x - 1, y), x, CompassQuadrant::West),
+            (IVec2::new(x, y - 1), y, CompassQuadrant::North),
+            (IVec2::new(x - 1, y), x, CompassQuadrant::East),
+            (IVec2::new(x, y + 1), y + 1, CompassQuadrant::South),
+            (IVec2::new(x + 1, y), x + 1, CompassQuadrant::West),
         ]
         .into_iter()
         .filter_map(move |(adjacent, position, direction)| {
