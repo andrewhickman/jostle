@@ -58,7 +58,7 @@ pub(crate) fn process<T>(
                     continue;
                 };
 
-                if let Some(t) = solve_agent_collision(
+                if let Some(t) = agent_collision(
                     target_position.position - position.position,
                     target_position.velocity - position.velocity,
                     agent.radius() + target_agent.radius(),
@@ -78,7 +78,7 @@ pub(crate) fn process<T>(
             }
 
             for (wall_position, wall_normal) in tile.boundaries(&*map) {
-                if let Some(t) = solve_wall_collision(
+                if let Some(t) = wall_collision(
                     position.position,
                     position.velocity,
                     agent.radius(),
@@ -141,7 +141,7 @@ impl Collision<'_> {
     }
 }
 
-fn solve_agent_collision(
+fn agent_collision(
     delta_position: Vec2,
     delta_velocity: Vec2,
     combined_radius: f32,
@@ -172,7 +172,7 @@ fn solve_agent_collision(
     }
 }
 
-fn solve_wall_collision(
+fn wall_collision(
     agent_position: Vec2,
     agent_velocity: Vec2,
     agent_radius: f32,
@@ -202,65 +202,255 @@ mod tests {
     use super::*;
 
     #[test]
-    fn collision_simple() {
-        let t = solve_agent_collision(Vec2::new(5.0, 0.0), Vec2::new(-2.0, 0.0), 1.0).unwrap();
+    fn agent_collision_simple() {
+        let t = agent_collision(Vec2::new(5.0, 0.0), Vec2::new(-2.0, 0.0), 1.0).unwrap();
         assert_relative_eq!(t, 2.0);
     }
 
     #[test]
-    fn collision_receding() {
-        let t = solve_agent_collision(Vec2::new(5.0, 0.0), Vec2::new(2.0, 0.0), 1.0);
+    fn agent_collision_receding() {
+        let t = agent_collision(Vec2::new(5.0, 0.0), Vec2::new(2.0, 0.0), 1.0);
         assert!(t.is_none());
     }
 
     #[test]
-    fn collision_touching_and_receding() {
-        let t = solve_agent_collision(Vec2::new(2.0, 0.0), Vec2::new(2.0, 0.0), 2.0);
+    fn agent_collision_touching_and_receding() {
+        let t = agent_collision(Vec2::new(2.0, 0.0), Vec2::new(2.0, 0.0), 2.0);
         assert!(t.is_none());
     }
 
     #[test]
-    fn collision_touching_and_closing() {
-        let t = solve_agent_collision(Vec2::new(2.0, 0.0), Vec2::new(-2.0, 0.0), 2.0).unwrap();
+    fn agent_collision_touching_and_closing() {
+        let t = agent_collision(Vec2::new(2.0, 0.0), Vec2::new(-2.0, 0.0), 2.0).unwrap();
         assert_relative_eq!(t, 0.0);
     }
 
     #[test]
-    fn intersecting_and_stationary() {
-        let t = solve_agent_collision(Vec2::new(0.5, 0.0), Vec2::ZERO, 2.0);
+    fn agent_collision_intersecting_and_stationary() {
+        let t = agent_collision(Vec2::new(0.5, 0.0), Vec2::ZERO, 2.0);
         assert!(t.is_none());
     }
 
     #[test]
-    fn intersecting_and_receding() {
-        let t = solve_agent_collision(Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0), 2.0);
+    fn agent_collision_intersecting_and_receding() {
+        let t = agent_collision(Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0), 2.0);
         assert!(t.is_none());
     }
 
     #[test]
-    fn intersecting_and_closing() {
-        let t = solve_agent_collision(Vec2::new(0.5, 0.0), Vec2::new(-1.0, 0.0), 2.0).unwrap();
+    fn agent_collision_intersecting_and_closing() {
+        let t = agent_collision(Vec2::new(0.5, 0.0), Vec2::new(-1.0, 0.0), 2.0).unwrap();
         assert_relative_eq!(t, -1.5);
     }
 
     #[test]
-    fn collision_angled() {
-        let t = solve_agent_collision(Vec2::new(3.0, 0.8), Vec2::new(-2.0, 0.0), 1.0).unwrap();
+    fn agent_collision_angled() {
+        let t = agent_collision(Vec2::new(3.0, 0.8), Vec2::new(-2.0, 0.0), 1.0).unwrap();
         assert_relative_eq!(t, 1.2);
     }
 
     #[test]
-    fn collision_almost_touching_closing() {
+    fn agent_collision_almost_touching_closing() {
         let eps = 1e-6f32;
-        let t =
-            solve_agent_collision(Vec2::new(2.0 + eps, 0.0), Vec2::new(-2.0, 0.0), 2.0).unwrap();
+        let t = agent_collision(Vec2::new(2.0 + eps, 0.0), Vec2::new(-2.0, 0.0), 2.0).unwrap();
         assert_relative_eq!(t, eps / 2.0);
     }
 
     #[test]
-    fn collision_almost_touching_receding() {
+    fn agent_collision_almost_touching_receding() {
         let eps = 1e-6f32;
-        let t = solve_agent_collision(Vec2::new(2.0 + eps, 0.0), Vec2::new(1.0, 0.0), 2.0);
+        let t = agent_collision(Vec2::new(2.0 + eps, 0.0), Vec2::new(1.0, 0.0), 2.0);
         assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_north_closing() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.5),
+            Vec2::new(0.0, -1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.3);
+    }
+
+    #[test]
+    fn wall_collision_east_closing() {
+        let t = wall_collision(
+            Vec2::new(1.6, 0.5),
+            Vec2::new(-2.0, 0.0),
+            0.2,
+            1,
+            CompassQuadrant::East,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.2);
+    }
+
+    #[test]
+    fn wall_collision_south_closing() {
+        let t = wall_collision(
+            Vec2::new(0.5, 0.3),
+            Vec2::new(0.0, 1.0),
+            0.2,
+            1,
+            CompassQuadrant::South,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.5);
+    }
+
+    #[test]
+    fn wall_collision_west_closing() {
+        let t = wall_collision(
+            Vec2::new(0.4, 0.5),
+            Vec2::new(1.0, 0.0),
+            0.2,
+            1,
+            CompassQuadrant::West,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.4);
+    }
+
+    #[test]
+    fn wall_collision_receding() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.5),
+            Vec2::new(0.0, 1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        );
+        assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_parallel() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.5),
+            Vec2::new(1.0, 0.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        );
+        assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_stationary() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.5),
+            Vec2::ZERO,
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        );
+        assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_touching() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.2),
+            Vec2::new(0.0, -1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.0);
+    }
+
+    #[test]
+    fn wall_collision_negative_wall_position() {
+        let t = wall_collision(
+            Vec2::new(-1.5, 0.5),
+            Vec2::new(1.0, 0.0),
+            0.2,
+            -1,
+            CompassQuadrant::West,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.3);
+    }
+
+    #[test]
+    fn wall_collision_different_tile_size() {
+        let t = wall_collision(
+            Vec2::new(1.0, 2.5),
+            Vec2::new(0.0, -1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            2.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, 0.3);
+    }
+
+    #[test]
+    fn wall_collision_intersecting_and_closing() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.1),
+            Vec2::new(0.0, -1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, -0.1);
+    }
+
+    #[test]
+    fn wall_collision_intersecting_and_receding() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.1),
+            Vec2::new(0.0, 1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        );
+        assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_intersecting_stationary() {
+        let t = wall_collision(
+            Vec2::new(0.5, 1.1),
+            Vec2::ZERO,
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        );
+        assert!(t.is_none());
+    }
+
+    #[test]
+    fn wall_collision_inside_and_closing() {
+        let t = wall_collision(
+            Vec2::new(0.5, 0.9),
+            Vec2::new(0.0, -1.0),
+            0.2,
+            1,
+            CompassQuadrant::North,
+            1.0,
+        )
+        .unwrap();
+        assert_relative_eq!(t, -0.3);
     }
 }
